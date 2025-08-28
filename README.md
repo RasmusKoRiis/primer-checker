@@ -53,7 +53,7 @@ The final output is a CSV report that can be visualized with tools like PowerBI.
 Run the script from the command line with the required parameters. For example:
 
 ```bash
-python3 primer_blast.py --primers primers.json --virus influenza --flu-type A --fasta file1.fasta file2.fasta --output primer_report.csv
+python3 primer_checker.py --primers primers.json --virus influenza --flu-type A --fasta file1.fasta file2.fasta --output primer_report.csv
 ```
 
 ## Command-Line Arguments

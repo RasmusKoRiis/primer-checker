@@ -108,31 +108,6 @@ def load_primer_library(library_file: str) -> dict:
     except Exception as e:
         sys.exit(f"Error loading primer library from {library_file}: {e}")
 
-def build_influenza_subtype_primers(primer_library: dict, subtype: str) -> dict:
-    """
-    Given the full 'Influenza-A' primer block and a subtype tag ('H1' or 'H3'),
-    return a dict that contains:
-      • all primers whose keys contain that subtype string, plus
-      • the universal M-gene primers (keys containing '_M')
-    """
-    generic = primer_library.get("Influenza-A")
-    if generic is None:
-        sys.exit("Primer JSON lacks the 'Influenza-A' section.")
-
-    subtype = subtype.upper()
-    if subtype == "A":
-        return generic  # full A panel
-
-    if subtype in {"H1", "H3"}:
-        subset = {k: v for k, v in generic.items() if subtype in k.upper()}
-
-        subset.update({k: v for k, v in generic.items() if "_M" in k.upper()})
-        if not subset:
-            sys.exit(f"No {subtype} primers found inside 'Influenza-A'.")
-        return subset
-
-    sys.exit(f"Unsupported Influenza-A subtype '{subtype}'.")
-
 def get_segment(subject_id: str) -> str:
     """
     Given a subject FASTA header (without the leading '>'),
@@ -388,8 +363,8 @@ def main():
     parser.add_argument(
         "--flu-type",
         type=str,
-        choices=["A", "H1", "H3", "B"],
-        help="For influenza, specify subtype: A (full A-panel), H1, H3 or B."
+        choices=["H1", "H3", "B"],
+        help="For influenza, specify the type: A or B."
     )
     parser.add_argument(
         "--fasta",
@@ -413,16 +388,8 @@ def main():
     virus_type = args.virus
     if virus_type.lower() == "influenza":
         if not args.flu_type:
-            sys.exit("Error: for influenza please supply --flu-type A, H1, H3 or B.")
-        subtype = args.flu_type.upper()
-        if subtype == "B":
-            virus_type = "Influenza-B"
-        else:  # A, H1 or H3
-            # Build a (cached) subtype-specific dict inside VIRUS_PRIMERS
-            VIRUS_PRIMERS[f"Influenza-{subtype}"] = build_influenza_subtype_primers(
-                VIRUS_PRIMERS, subtype
-            )
-            virus_type = f"Influenza-{subtype}"
+            sys.exit("Error: For influenza, please specify --flu-type A or B.")
+        virus_type = "Influenza-" + args.flu_type.upper()
 
     fasta_files = args.fasta
     output_file = args.output
