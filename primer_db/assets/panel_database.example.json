@@ -1,0 +1,30 @@
+{
+  "schema_version": "3.0",
+  "database_version": "2026-05-21",
+  "viruses": [
+    {
+      "organism": "SARS-CoV-2",
+      "ngs": {
+        "panels": [
+          {
+            "panel_id": "sars2-ngs-vmidt-2.2",
+            "display_name": "SARS-CoV-2 VMIDT 2.2 NGS Panel",
+            "panel_version": "VMIDT.2.2",
+            "reference": {
+              "name": "NC_045512.2",
+              "coordinate_system": "0-based BED"
+            },
+            "files": {
+              "bed": "SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.scheme.bed",
+              "primers_fasta": "SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.primers.fasta"
+            },
+            "mapping": {
+              "bed_name_field": "name",
+              "pool_from_bed_field": 4
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

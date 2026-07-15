@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated primer-checker outputs
+primer_report.csv
+primer_report.html
+batch_primer_report.csv
+batch_primer_report.html
+result/*.csv
+result/*.html
+!result/.gitkeep

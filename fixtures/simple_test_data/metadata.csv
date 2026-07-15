@@ -1,0 +1,4 @@
+SampleID,Sample_Date,Ct_Value,CT_H3,Triplex-SC2_CT,CT_RSVA
+sample_sc2,2026-05-01,21.0,,20.5,
+sample_rsva,2026-05-02,23.0,,,22.7
+sample_h3,2026-05-03,25.0,24.2,,

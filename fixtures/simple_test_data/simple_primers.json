@@ -1,0 +1,11 @@
+{
+  "SARS-CoV-2": {
+    "simple_SC2_F": "ACGTACGT"
+  },
+  "RSV-A": {
+    "simple_RSVA_F": "TTTTCCCC"
+  },
+  "Influenza-A": {
+    "H3_simple_F_HA": "GGGGAAAA"
+  }
+}
