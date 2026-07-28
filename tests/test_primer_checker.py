@@ -771,42 +771,113 @@ def test_html_report_contains_embedded_filterable_data_and_escapes_values():
             }
         ],
     )
+    english_text = primer_report.load_report_translations()["en"]
 
     assert "filter-primer" in html
-    assert "Primer Investigation" in html
-    assert "NGS Amplicon Panel Overview" in html
+    assert "filter-risk" in html
+    assert english_text["risk"] in html
+    assert "filter-status" not in html
+    assert "filter-mismatches" not in html
+    assert "Maximum mismatches" not in html
+    assert english_text["primer_investigation_title"] in html
+    assert english_text["ngs_title"] in html
     assert "renderNgsPanelOverview" in html
-    assert "NO viable primer" in html
-    assert "Alternative primers are redundant" in html
-    assert "Risk" in html
+    assert english_text["no_viable_primer"] in html
+    assert english_text["ngs_note"] in html
+    assert "Review level" in html
     assert "RISK_THRESHOLDS" in html
-    assert "Mismatch count distribution for this primer" in html
+    assert english_text["mismatch_distribution_title"] in html
     assert "<h2>Mismatch Count Distribution</h2>" not in html
-    assert "Mismatch distribution along primer sequence" in html
+    assert english_text["chart_title"] in html
+    assert "Mismatch distribution along primer sequence" not in html
     assert "Mismatch_Details" in html
     assert "A&gt;G" in html or "A\\u003eG" in html
-    assert "Sample timeline" in html
-    assert "Primer alignment" in html
+    assert "percent_axis" in html
+    assert "sampleBaseFromChange" in html
+    assert english_text["sample_base"] in html
+    assert "data-language=\"no\"" in html
+    assert "Norsk" in html
+    assert "Sample timeline" not in html
+    assert english_text["modal_title"] in html
     assert "alignment-modal" in html
     assert "data-alignment-key" in html
-    assert "No alignment is available for this row." in html
+    assert english_text["no_alignment"] in html
     assert "IUPAC_BASES_FOR_REPORT" in html
     assert "Y: ['C', 'T']" in html
-    assert "state.sortKey !== 'Hit_Status'" in html
-    assert "Ct_Value" in html
-    assert "Ct_Source" in html
-    assert "2025-01-01" in html
+    assert "if (!state.sortKey)" in html
+    assert english_text["doc_title"] in html
+    assert 'data-tab="documentation"' in html
+    assert 'class="doc-lead"' in html
+    assert 'class="doc-faq-list"' in html
+    assert 'class="doc-risk-list"' in html
+    assert 'class="doc-two-column"' in html
+    assert 'class="doc-step-list"' in html
+    assert 'class="report-note"' in html
+    assert english_text["doc_faq_1_q"] in html
+    assert english_text["doc_workflow_title"] in html
+    assert english_text["overview_note_label"] in html
+    assert english_text["chart_note_what_label"] in html
+    assert english_text["col_Terminal_Mismatch_Share"] in html
+    assert english_text["two_plus_rate"] in html
+    assert english_text["three_plus_rate"] in html
+    assert "t('two_plus_rate') + '<strong><br>' + formatPercent(stats.twoPlusMismatchRate)" in html
+    assert "t('three_plus_rate') + '<strong><br>' + formatPercent(stats.threePlusMismatchRate)" in html
+    assert english_text["doc_faq_5"] in html
+    assert english_text["doc_risk_high"] in html
+    assert "terminalMismatchHits / hitRows.length" in html
+    assert "highTerminalMismatchRate: 0.05" in html
+    assert english_text["sample_rows_sorted"] in html
+    assert "doc_faq_6_q" in html
+    assert "formatIdentityValue" in html
+    assert "toFixed(2)" in html
+    assert "Ct_Value" not in html
+    assert "Ct_Source" not in html
+    assert "Sample_Date" not in html
+    assert "Metadata_Sample_ID" not in html
+    assert "2025-01-01" not in html
+    assert "Avg_Mismatches" not in html
+    assert "Average mismatches" not in html
     assert "Primers to Review" not in html
     assert "renderReviewPrimerList" not in html
     assert "data-detail-sort" in html
     assert "data-table-toggle" in html
+    assert "primerPanelId" in html
+    assert "primer-link" in html
+    assert english_text["jump_to_primer"] in html
     assert "Showing top 10" not in html
-    assert "Show top 10" in html
-    assert "previous-report-data" in html
-    assert "old_report.csv" in html
+    assert english_text["show_top_10"] in html
+    assert "previous-report-data" not in html
+    assert "Attached Previous Reports" not in html
+    assert "old_report.csv" not in html
     assert "triplex_InfB_F_NS" in html
     assert "sample</script>" not in html
     assert "\\u003c/script\\u003e" in html
+
+
+def test_report_text_files_are_loaded_and_validated(tmp_path):
+    english_path = tmp_path / "english.json"
+    norwegian_path = tmp_path / "norwegian.json"
+    english = {
+        "report_title": "Custom report",
+        "open_alignment": "Open alignment for {sample}",
+    }
+    norwegian = {
+        "report_title": "Tilpasset rapport",
+        "open_alignment": "Åpne sekvenssammenstilling for {sample}",
+    }
+    english_path.write_text(json.dumps(english), encoding="utf-8")
+    norwegian_path.write_text(json.dumps(norwegian), encoding="utf-8")
+
+    translations = primer_report.load_report_translations(tmp_path)
+
+    assert translations["en"]["report_title"] == "Custom report"
+    assert translations["no"]["report_title"] == "Tilpasset rapport"
+
+    norwegian["open_alignment"] = "Åpne sekvenssammenstilling"
+    norwegian_path.write_text(json.dumps(norwegian), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Placeholders.*open_alignment"):
+        primer_report.load_report_translations(tmp_path)
 
 
 def test_previous_report_csv_loader_reads_rows_and_warns_on_bad_csv(tmp_path):
@@ -826,6 +897,18 @@ def test_previous_report_csv_loader_reads_rows_and_warns_on_bad_csv(tmp_path):
     missing_report = primer_report.load_previous_report_csv(str(tmp_path / "missing.csv"))
     assert missing_report["warnings"]
 
+
+def test_html_report_build_failure_preserves_existing_output(monkeypatch, tmp_path):
+    output = tmp_path / "report.html"
+    output.write_text("existing report", encoding="utf-8")
+
+    def fail_to_build(*_args, **_kwargs):
+        raise ValueError("invalid report text")
+
+    monkeypatch.setattr(primer_report, "build_html_report", fail_to_build)
+    primer_report.write_html_report([{"Primer_Name": "primer-a"}], str(output))
+
+    assert output.read_text(encoding="utf-8") == "existing report"
 
 def test_run_blastn_cleans_query_file_when_blast_is_missing(monkeypatch, tmp_path):
     query_file = tmp_path / "query.fasta"

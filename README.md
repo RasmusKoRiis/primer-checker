@@ -18,7 +18,8 @@ The canonical output is a CSV report that can be visualized with tools like Powe
 ## Project Layout
 
 - `primer_analysis.py`: primer loading, metadata matching, FASTA parsing, BLAST analysis, and CSV output.
-- `primer_report.py`: previous-report CSV loading and self-contained HTML report generation.
+- `primer_report.py`: self-contained HTML report generation.
+- `report_text/`: editable English and Norwegian wording used in the HTML report.
 - `primer_checker.py`: command-line entrypoint and compatibility import surface.
 - `scripts/run_primer_checker_batch.py`: batch runner for mixed FASTA folders.
 - `primer_db/`: primer databases. `primer_db/fhi_primers.unified.json` is the preferred FHI database, organized by virus with PCR schemes and NGS panels separated.
@@ -26,6 +27,17 @@ The canonical output is a CSV report that can be visualized with tools like Powe
 - `docs/`: maintenance notes and implementation plans.
 - `result/`: local generated CSV/HTML outputs.
 
+
+## Editing the HTML report text
+
+The visible wording is stored separately from the Python and JavaScript code:
+
+- Edit `report_text/english.json` for English text.
+- Edit `report_text/norwegian.json` for Norwegian text.
+
+Change only the values on the right-hand side of the keys. Keep the key names, JSON commas and quotation marks, and placeholders such as `{sample}`, `{percent}`, `{count}`, `{visible}`, and `{total}` unchanged. Both files must contain the same keys.
+
+After saving, rerun the normal primer-checker command to generate a new HTML report. Existing HTML files do not update automatically. See `report_text/README.md` for the short editing guide.
 
 ## Features
 
@@ -38,7 +50,7 @@ The canonical output is a CSV report that can be visualized with tools like Powe
 - **Influenza-Specific Filtering:** For Influenza virus, an additional parameter (`--flu-type`) specifies whether to use the Influenza-A, H1, H3, or Influenza-B primer set. H1/H3 runs use primers tagged for that subtype plus untagged Influenza-A primers, and exclude primers tagged for the other subtype. Sequences are filtered by segment (e.g., HA, M, or NS) based on FASTA header formatting.
 - **Batch Folder Wrapper:** `scripts/run_primer_checker_batch.py` can scan a folder of FASTA files, infer the correct virus/subtype from each filename, and write one combined CSV/HTML report.
 - **Optional Sample Metadata:** `--metadata-csv` attaches sample date and assay-specific Ct values to result rows when metadata sample IDs match FASTA headers.
-- **Visual Investigation Report:** `--html-report` writes a self-contained HTML/CSS/JS file that opens directly in a browser and provides filters, primer risk badges, mismatch distribution plots, mismatch-position graphics with nucleotide-change details, per-primer timelines, clickable sample alignment popups, and optional previous-report summaries.
+- **Visual Investigation Report:** `--html-report` writes a self-contained HTML/CSS/JS file that opens directly in a browser and provides filters, primer risk badges, stacked sample-nucleotide percentage charts, mismatch count distributions, detailed documentation, English/Norwegian text toggle, and clickable sample alignment popups.
 
 ## Prerequisites
 
@@ -183,7 +195,7 @@ python3 primer_checker.py --primers primers.json --virus influenza --flu-type B 
 Attach one or more previous CSV reports to the HTML report:
 
 ```bash
-python3 primer_checker.py --primers primers.json --virus influenza --flu-type B --fasta file1.fasta --output primer_report.csv --html-report primer_report.html --previous-report-csv old_report.csv
+python3 primer_checker.py --primers primers.json --virus influenza --flu-type B --fasta file1.fasta --output primer_report.csv --html-report primer_report.html
 ```
 
 Attach sample metadata to the CSV and HTML report:
@@ -265,7 +277,6 @@ python3 scripts/run_primer_checker_batch.py \
 - **--fasta:** One or more FASTA files containing the subject sequences.
 - **--output:** The output CSV file for the report (default: `primer_report.csv`).
 - **--html-report:** Optional self-contained HTML report file.
-- **--previous-report-csv:** Optional previous CSV report to embed into the HTML report. Repeat the option to attach multiple reports.
 - **--metadata-csv:** Optional sample metadata CSV. The file must contain a sample ID column such as `SampleID` or `Sample_ID`, and may contain `Sample_Date` plus one or more Ct assay columns such as `CT_H3`, `CT_H1`, `Triplex-InfA_CT`, `Triplex-InfB_CT`, `Triplex-SC2_CT`, `CT_RSVA`, or `CT_RSVB`.
 - **--validate-primers:** Validate the primer JSON and exit without requiring `--virus`, `--fasta`, or BLAST.
 
@@ -295,7 +306,7 @@ Attached metadata is written to the CSV columns `Metadata_Sample_ID`, `Sample_Da
 - Influenza-A and Influenza-B rows prefer `CT_INFA` and `CT_INFB`.
 - Generic `Ct_Value` is used as a fallback.
 
-ISO dates such as `2025-05-07` are preferred; the HTML report also accepts common day-month-year dates such as `07.05.2025`. The HTML report uses `Sample_Date` and selected `Ct_Value` to draw a per-primer timeline showing average mismatches and average Ct over time for the current filters. `Ct_Source` is shown so you can see which metadata Ct assay was used.
+ISO dates such as `2025-05-07` are preferred for CSV consumers. The HTML report currently omits sample metadata fields while the surveillance-focused report layout is being revised.
 
 A small test metadata file based on the external FASTA sample IDs is included at `fixtures/fake_metadata.csv`.
 
@@ -384,7 +395,6 @@ For H1/H3 filename-based influenza runs, subtype-specific primer selection is ba
   - Subject sequence ID
   - Percent identity, alignment length, mismatches, gap openings, query/subject start-end positions, e-value, bitscore, and mismatch positions
 - If `--html-report` is supplied, a local visual report is also generated from the same result rows.
-- If `--previous-report-csv` is supplied, previous reports are parsed and embedded into the HTML for local comparison.
 
 ## Testing
 

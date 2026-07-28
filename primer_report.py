@@ -5,9 +5,98 @@ import csv
 import html
 import json
 import os
+import re
 import sys
+from pathlib import Path
 
 from primer_analysis import CSV_FIELDNAMES
+
+REPORT_TEXT_DIRECTORY = Path(__file__).resolve().parent / "report_text"
+REPORT_TEXT_FILES = {
+    "en": "english.json",
+    "no": "norwegian.json",
+}
+REPORT_TEXT_PLACEHOLDER_PATTERN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+METADATA_REPORT_FIELDNAMES = {
+    "Metadata_Sample_ID",
+    "Sample_Date",
+    "Ct_Value",
+    "Ct_Source",
+}
+REPORT_FIELDNAMES = [field for field in CSV_FIELDNAMES if field not in METADATA_REPORT_FIELDNAMES]
+
+
+def load_report_translations(
+    text_directory: str | os.PathLike[str] | None = None,
+) -> dict[str, dict[str, str]]:
+    """Load and validate the editable report text files."""
+    directory = Path(text_directory) if text_directory is not None else REPORT_TEXT_DIRECTORY
+    translations: dict[str, dict[str, str]] = {}
+
+    for language, filename in REPORT_TEXT_FILES.items():
+        path = directory / filename
+        try:
+            with path.open(encoding="utf-8") as text_file:
+                values = json.load(text_file)
+        except FileNotFoundError as error:
+            raise FileNotFoundError(f"Report text file not found: {path}") from error
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"Invalid JSON in report text file {path} at line {error.lineno}, "
+                f"column {error.colno}: {error.msg}"
+            ) from error
+
+        if not isinstance(values, dict):
+            raise ValueError(f"Report text file {path} must contain one JSON object.")
+
+        invalid_keys = [key for key in values if not isinstance(key, str)]
+        invalid_values = [key for key, value in values.items() if not isinstance(value, str)]
+        if invalid_keys:
+            raise ValueError(f"Report text file {path} contains a non-text key.")
+        if invalid_values:
+            joined_keys = ", ".join(sorted(invalid_values))
+            raise ValueError(f"Report text values must be text in {path}: {joined_keys}")
+
+        translations[language] = values
+
+    english_keys = set(translations["en"])
+    for language, values in translations.items():
+        language_keys = set(values)
+        missing_keys = sorted(english_keys - language_keys)
+        extra_keys = sorted(language_keys - english_keys)
+        if missing_keys or extra_keys:
+            details = []
+            if missing_keys:
+                details.append("missing: " + ", ".join(missing_keys))
+            if extra_keys:
+                details.append("extra: " + ", ".join(extra_keys))
+            raise ValueError(
+                f"Report text keys in {REPORT_TEXT_FILES[language]} do not match english.json "
+                f"({'; '.join(details)})."
+            )
+
+        for key in english_keys:
+            english_placeholders = set(REPORT_TEXT_PLACEHOLDER_PATTERN.findall(translations["en"][key]))
+            translated_placeholders = set(REPORT_TEXT_PLACEHOLDER_PATTERN.findall(values[key]))
+            if translated_placeholders != english_placeholders:
+                raise ValueError(
+                    f"Placeholders for report text key {key!r} do not match between "
+                    f"english.json and {REPORT_TEXT_FILES[language]}."
+                )
+
+    return translations
+
+
+def _json_for_inline_script(value) -> str:
+    """Serialize JSON without allowing values to terminate an inline script element."""
+    return (
+        json.dumps(value, ensure_ascii=True)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+
 
 def safe_number(value):
     if value in ("", None, "No hit"):
@@ -48,29 +137,26 @@ def load_previous_report_csvs(paths: list[str] | None) -> list[dict]:
 
 def build_html_report(
     results: list[dict],
-    title: str = "Primer Checker Report",
+    title: str | None = None,
     previous_reports: list[dict] | None = None,
 ) -> str:
     """Build a self-contained HTML report with embedded result data."""
     report_rows = []
     for row in results:
-        report_rows.append({field: row.get(field, "") for field in CSV_FIELDNAMES})
+        report_rows.append({field: row.get(field, "") for field in REPORT_FIELDNAMES})
 
-    previous_reports = previous_reports or []
-    data_json = (
-        json.dumps(report_rows, ensure_ascii=True)
-        .replace("&", "\\u0026")
-        .replace("<", "\\u003c")
-        .replace(">", "\\u003e")
-    )
-    previous_json = (
-        json.dumps(previous_reports, ensure_ascii=True)
-        .replace("&", "\\u0026")
-        .replace("<", "\\u003c")
-        .replace(">", "\\u003e")
-    )
-    fields_json = json.dumps(CSV_FIELDNAMES)
-    escaped_title = html.escape(title)
+    previous_reports = [
+        {
+            **report,
+            "rows": [{field: row.get(field, "") for field in REPORT_FIELDNAMES} for row in report.get("rows", [])],
+        }
+        for report in (previous_reports or [])
+    ]
+    translations = load_report_translations()
+    data_json = _json_for_inline_script(report_rows)
+    translations_json = _json_for_inline_script(translations)
+    fields_json = json.dumps(REPORT_FIELDNAMES)
+    escaped_title = html.escape(title or translations["en"]["report_title"])
     template = """<!doctype html>
 <html lang="en">
 <head>
@@ -111,6 +197,34 @@ def build_html_report(
     h3 { margin: 0 0 10px; font-size: 16px; letter-spacing: 0; }
     main { padding: 20px 32px 36px; }
     .meta, .section-note { color: var(--muted); margin: 0 0 12px; }
+    .report-note {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 14px;
+      padding: 12px 14px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .report-note-compact { margin-top: 10px; }
+    .note-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 170px) 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .note-row strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .report-note .table-toggle {
+      justify-self: start;
+      margin-top: 2px;
+    }
     .filters {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -136,7 +250,7 @@ def build_html_report(
       gap: 12px;
       margin-top: 16px;
     }
-    .card, .plot-card, .previous-report-panel {
+    .card, .plot-card {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -185,12 +299,56 @@ def build_html_report(
       color: var(--muted);
       font-size: 13px;
     }
+    .report-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+    .tab-button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 600;
+    }
+    .tab-button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .tab-panel[hidden] { display: none; }
+    .language-toggle {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .language-button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      padding: 6px 10px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .language-button.active {
+      background: var(--accent-weak);
+      border-color: var(--accent);
+    }
     .primer-panel {
       margin-top: 12px;
       padding: 14px;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
+      scroll-margin-top: 18px;
     }
     .primer-panel.risk-high-panel { border-left: 5px solid #dd6b20; }
     .primer-panel.risk-critical-panel { border-left: 5px solid var(--bad); }
@@ -243,31 +401,6 @@ def build_html_report(
       overflow-x: auto;
       padding-bottom: 4px;
     }
-    .timeline-plot {
-      width: 100%;
-      overflow-x: auto;
-      padding-bottom: 4px;
-    }
-    .timeline-svg {
-      max-width: 100%;
-      min-width: 560px;
-      height: auto;
-      display: block;
-    }
-    .timeline-mismatch { stroke: var(--bad); fill: none; stroke-width: 2.5; }
-    .timeline-ct { stroke: var(--accent); fill: none; stroke-width: 2.5; stroke-dasharray: 5 3; }
-    .timeline-point-mismatch { fill: var(--bad); }
-    .timeline-point-ct { fill: var(--accent); }
-    .timeline-axis { stroke: #9aa6b2; }
-    .timeline-label { fill: var(--muted); font-size: 11px; }
-    .timeline-legend {
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 8px;
-    }
     .alignment-button {
       border: 0;
       background: transparent;
@@ -275,6 +408,12 @@ def build_html_report(
       cursor: pointer;
       font: inherit;
       padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .primer-link {
+      color: var(--accent);
+      font-weight: 700;
       text-decoration: underline;
       text-underline-offset: 2px;
     }
@@ -343,10 +482,6 @@ def build_html_report(
     .base-label { fill: var(--ink); font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .three-prime { fill: #b42318; font-weight: 700; }
     .five-prime { fill: #1f7a8c; font-weight: 700; }
-    .previous-reports {
-      display: grid;
-      gap: 12px;
-    }
     .review-reason {
       color: var(--muted);
       font-size: 13px;
@@ -394,101 +529,386 @@ def build_html_report(
     .amplicon-tile.risk-watch { border-left-color: #d69e2e; }
     .amplicon-tile.risk-high { border-left-color: #dd6b20; }
     .amplicon-tile.risk-critical { border-left-color: var(--bad); }
+    .change-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .change-swatch {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border-radius: 2px;
+      margin-right: 5px;
+      vertical-align: -1px;
+      border: 1px solid rgba(23, 32, 42, 0.18);
+    }
+    .documentation {
+      max-width: 1160px;
+      display: grid;
+      gap: 16px;
+    }
+    .documentation h2 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .documentation p,
+    .documentation li,
+    .documentation span {
+      color: var(--muted);
+      line-height: 1.62;
+    }
+    .documentation p { margin: 0; }
+    .documentation ul,
+    .documentation ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .doc-lead {
+      max-width: 880px;
+      padding: 16px 18px;
+      background: #eef7f8;
+      border: 1px solid #c8e4e8;
+      border-left: 5px solid var(--accent);
+      border-radius: 8px;
+      color: #334155;
+      font-size: 15px;
+      line-height: 1.65;
+    }
+    .doc-section {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 4px solid #9fb3c8;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .doc-section-priority { border-left-color: var(--accent); }
+    .doc-section > h3 {
+      margin: 0;
+      padding: 13px 18px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 16px;
+    }
+    .doc-section > p,
+    .doc-section > ul,
+    .doc-section > ol {
+      margin: 16px 18px;
+    }
+    .doc-section > p + ul,
+    .doc-section > p + ol {
+      margin-top: -6px;
+    }
+    .doc-section li + li { margin-top: 8px; }
+    .doc-faq-list,
+    .doc-risk-list {
+      list-style: none;
+      padding-left: 0;
+    }
+    .doc-faq-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 10px;
+    }
+    .doc-faq-list li {
+      display: grid;
+      gap: 6px;
+      min-height: 100%;
+      padding: 12px 14px;
+      background: #fbfcfe;
+      border: 1px solid var(--line);
+      border-left: 4px solid #c8e4e8;
+      border-radius: 7px;
+    }
+    .doc-faq-list strong {
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .doc-faq-list span {
+      font-size: 14px;
+    }
+    .doc-risk-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+    .doc-risk-list li {
+      padding: 12px 14px;
+      background: #fbfcfe;
+      border: 1px solid var(--line);
+      border-left-width: 5px;
+      border-radius: 7px;
+      line-height: 1.55;
+    }
+    .doc-risk-critical { border-left-color: var(--bad); }
+    .doc-risk-high { border-left-color: #dd6b20; }
+    .doc-risk-watch { border-left-color: #d69e2e; }
+    .doc-risk-low { border-left-color: var(--good); }
+    .doc-two-column {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+    .doc-step-list li::marker {
+      color: var(--accent);
+      font-weight: 700;
+    }
     .empty { padding: 18px; color: var(--muted); }
     @media (max-width: 700px) {
       header, main { padding-left: 16px; padding-right: 16px; }
       .distribution-row { grid-template-columns: 52px 1fr; }
       .distribution-row span:last-child { grid-column: 2; }
+      .note-row { grid-template-columns: 1fr; gap: 3px; }
+      .doc-section { padding: 14px; }
     }
   </style>
 </head>
 <body>
+  <!-- Visible wording is loaded from report_text/english.json and norwegian.json. -->
   <header>
-    <h1>__REPORT_TITLE__</h1>
-    <p class="meta">Static local report generated from primer checker result rows.</p>
+    <h1 data-i18n="report_title">Primer binding-site report</h1>
+    <p class="meta" data-i18n="report_meta">Shows how well each primer matches the uploaded sequences. Use the report to find primers that may need closer review.</p>
   </header>
   <main>
-    <section class="filters" aria-label="Report filters">
-      <label>Organism or virus<select id="filter-virus"></select></label>
-      <label>Primer<select id="filter-primer"></select></label>
-      <label>FASTA file<select id="filter-fasta"></select></label>
-      <label>Hit status<select id="filter-status"></select></label>
-      <label>Maximum mismatches<input id="filter-mismatches" type="number" min="0" step="1" placeholder="Any"></label>
+    <div class="language-toggle" data-i18n-aria-label="language_label" aria-label="Report language">
+      <button class="language-button active" type="button" data-language="en">English</button>
+      <button class="language-button" type="button" data-language="no">Norsk</button>
+    </div>
+    <nav class="report-tabs" data-i18n-aria-label="report_tabs_label" aria-label="Report sections">
+      <button class="tab-button active" type="button" data-tab="overview" data-i18n="tab_overview">Results</button>
+      <button class="tab-button" type="button" data-tab="documentation" data-i18n="tab_documentation">Help and documentation</button>
+    </nav>
+    <section class="tab-panel" id="overview-tab">
+      <section class="filters" data-i18n-aria-label="report_filters_label" aria-label="Filter report results">
+        <label><span data-i18n="filter_virus">Organism or virus</span><select id="filter-virus"></select></label>
+        <label><span data-i18n="filter_primer">Primer</span><select id="filter-primer"></select></label>
+        <label><span data-i18n="filter_fasta">Input FASTA file</span><select id="filter-fasta"></select></label>
+        <label><span data-i18n="filter_risk">Review level</span><select id="filter-risk"></select></label>
+      </section>
+      <section class="cards" id="overview-cards"></section>
+      <section id="ngs-panel-overview"></section>
+      <h2 data-i18n="primer_overview_title">Primer overview</h2>
+      <div class="report-note">
+        <div class="note-row"><strong data-i18n="overview_note_label">How to read</strong><span data-i18n="primer_overview_note">First review primers marked Watch, High or Critical. Click a primer name to open its details. Check which sequences have no hit or several mismatches, and whether mismatches occur near either primer end.</span></div>
+        <div class="note-row"><strong data-i18n="risk_note_label">Important</strong><span data-i18n="risk_criteria_note">The review level is an automatic screening signal based on the filtered data. It does not by itself mean that the assay has failed. Confirm important findings with assay performance data and laboratory context.</span></div>
+      </div>
+      <div class="legend" id="risk-legend"></div>
+      <div class="table-wrap"><table id="summary-table"></table></div>
+      <h2 data-i18n="primer_investigation_title">Primer details</h2>
+      <div class="report-note"><div class="note-row"><strong data-i18n="primer_investigation_note_label">How to use this section</strong><span data-i18n="primer_investigation_note">For each primer, first check the summary values and the mismatch-position chart. Then review the mismatch distribution and the individual sequences.</span></div></div>
+      <section id="primer-panels"></section>
     </section>
-    <section class="cards" id="overview-cards"></section>
-    <section id="ngs-panel-overview"></section>
-    <h2>Primer Overview</h2>
-    <p class="section-note">Risk combines no-hit rate, average mismatches, mismatch burden, and terminal mismatch concentration near the 5' and 3' ends.</p>
-    <div class="legend" id="risk-legend"></div>
-    <div class="table-wrap"><table id="summary-table"></table></div>
-    <h2>Attached Previous Reports</h2>
-    <p class="section-note">Optional CSV reports attached at generation time for local comparison.</p>
-    <section class="previous-reports" id="previous-reports"></section>
-    <h2>Primer Investigation</h2>
-    <section id="primer-panels"></section>
+    <section class="tab-panel documentation" id="documentation-tab" hidden>
+      <h2 data-i18n="doc_title">Help and documentation</h2>
+      <p class="doc-lead" data-i18n="doc_intro"></p>
+
+      <section class="doc-section doc-section-priority">
+        <h3 data-i18n="doc_use_title"></h3>
+        <ol class="doc-step-list">
+          <li data-i18n="doc_use_1"></li>
+          <li data-i18n="doc_use_2"></li>
+          <li data-i18n="doc_use_3"></li>
+          <li data-i18n="doc_use_4"></li>
+          <li data-i18n="doc_use_5"></li>
+          <li data-i18n="doc_use_6"></li>
+        </ol>
+      </section>
+
+      <section class="doc-section doc-section-priority">
+        <h3 data-i18n="doc_faq_title"></h3>
+        <ul class="doc-faq-list">
+          <li><strong data-i18n="doc_faq_1_q"></strong><span data-i18n="doc_faq_1"></span></li>
+          <li><strong data-i18n="doc_faq_2_q"></strong><span data-i18n="doc_faq_2"></span></li>
+          <li><strong data-i18n="doc_faq_3_q"></strong><span data-i18n="doc_faq_3"></span></li>
+          <li><strong data-i18n="doc_faq_4_q"></strong><span data-i18n="doc_faq_4"></span></li>
+          <li><strong data-i18n="doc_faq_5_q"></strong><span data-i18n="doc_faq_5"></span></li>
+          <li><strong data-i18n="doc_faq_6_q"></strong><span data-i18n="doc_faq_6"></span></li>
+          <li><strong data-i18n="doc_faq_7_q"></strong><span data-i18n="doc_faq_7"></span></li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_glossary_title"></h3>
+        <ul>
+          <li data-i18n="doc_term_hit"></li>
+          <li data-i18n="doc_term_no_hit"></li>
+          <li data-i18n="doc_term_mismatch"></li>
+          <li data-i18n="doc_term_identity"></li>
+          <li data-i18n="doc_term_terminal"></li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_cards_title"></h3>
+        <p data-i18n="doc_filters_text"></p>
+        <ul>
+          <li data-i18n="doc_cards_1"></li>
+          <li data-i18n="doc_cards_2"></li>
+          <li data-i18n="doc_cards_3"></li>
+          <li data-i18n="doc_cards_4"></li>
+          <li data-i18n="doc_cards_5"></li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_overview_title"></h3>
+        <p data-i18n="doc_overview_text"></p>
+        <ul>
+          <li data-i18n="doc_overview_1"></li>
+          <li data-i18n="doc_overview_2"></li>
+          <li data-i18n="doc_overview_3"></li>
+          <li data-i18n="doc_overview_4"></li>
+          <li data-i18n="doc_overview_5"></li>
+          <li data-i18n="doc_overview_6"></li>
+          <li data-i18n="doc_overview_7"></li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_risk_title"></h3>
+        <p data-i18n="doc_risk_text"></p>
+        <ul class="doc-risk-list">
+          <li class="doc-risk-critical" data-i18n="doc_risk_critical"></li>
+          <li class="doc-risk-high" data-i18n="doc_risk_high"></li>
+          <li class="doc-risk-watch" data-i18n="doc_risk_watch"></li>
+          <li class="doc-risk-low" data-i18n="doc_risk_low"></li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_panels_title"></h3>
+        <p data-i18n="doc_panels_text"></p>
+      </section>
+
+      <div class="doc-two-column">
+        <section class="doc-section">
+          <h3 data-i18n="doc_chart_title"></h3>
+          <p data-i18n="doc_chart_text"></p>
+        </section>
+        <section class="doc-section">
+          <h3 data-i18n="doc_distribution_title"></h3>
+          <p data-i18n="doc_distribution_text"></p>
+        </section>
+      </div>
+
+      <div class="doc-two-column">
+        <section class="doc-section">
+          <h3 data-i18n="doc_detail_title"></h3>
+          <p data-i18n="doc_detail_text"></p>
+        </section>
+        <section class="doc-section">
+          <h3 data-i18n="doc_alignment_title"></h3>
+          <p data-i18n="doc_alignment_text"></p>
+        </section>
+      </div>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_workflow_title"></h3>
+        <ol class="doc-step-list">
+          <li data-i18n="doc_workflow_1"></li>
+          <li data-i18n="doc_workflow_2"></li>
+          <li data-i18n="doc_workflow_3"></li>
+          <li data-i18n="doc_workflow_4"></li>
+          <li data-i18n="doc_workflow_5"></li>
+        </ol>
+      </section>
+
+      <section class="doc-section">
+        <h3 data-i18n="doc_ngs_title"></h3>
+        <p data-i18n="doc_ngs_text"></p>
+      </section>
+
+      <section class="doc-section doc-section-priority">
+        <h3 data-i18n="doc_limits_title"></h3>
+        <ul>
+          <li data-i18n="doc_limits_1"></li>
+          <li data-i18n="doc_limits_2"></li>
+          <li data-i18n="doc_limits_3"></li>
+          <li data-i18n="doc_limits_4"></li>
+          <li data-i18n="doc_limits_5"></li>
+        </ul>
+      </section>
+    </section>
   </main>
   <div class="modal-backdrop" id="alignment-modal" role="dialog" aria-modal="true" aria-labelledby="alignment-modal-title">
     <div class="modal">
       <div class="modal-header">
         <div>
-          <h2 id="alignment-modal-title">Primer alignment</h2>
+          <h2 id="alignment-modal-title" data-i18n="modal_title">Primer alignment</h2>
           <p class="section-note" id="alignment-modal-meta"></p>
         </div>
-        <button class="modal-close" type="button" id="alignment-modal-close">Close</button>
+        <button class="modal-close" type="button" id="alignment-modal-close" data-i18n="close">Close</button>
       </div>
       <div id="alignment-modal-body"></div>
     </div>
   </div>
   <script id="report-data" type="application/json">__REPORT_DATA__</script>
-  <script id="previous-report-data" type="application/json">__PREVIOUS_REPORT_DATA__</script>
   <script>
     const rows = JSON.parse(document.getElementById('report-data').textContent);
-    const previousReports = JSON.parse(document.getElementById('previous-report-data').textContent);
     const fields = __FIELDS_JSON__;
+    const TRANSLATIONS = __TRANSLATIONS_JSON__;
+    let currentLanguage = 'en';
+    function t(key, replacements = {}) {
+      let value = (TRANSLATIONS[currentLanguage] && TRANSLATIONS[currentLanguage][key]) || TRANSLATIONS.en[key] || key;
+      for (const [name, replacement] of Object.entries(replacements)) {
+        value = value.replaceAll('{' + name + '}', replacement);
+      }
+      return value;
+    }
+    function applyTranslations() {
+      document.documentElement.lang = currentLanguage;
+      document.title = t('report_title');
+      document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = t(element.dataset.i18n); });
+      document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
+        element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel));
+      });
+      document.querySelectorAll('[data-language]').forEach(button => button.classList.toggle('active', button.dataset.language === currentLanguage));
+    }
     const RISK_THRESHOLDS = {
-      watchAvgMismatch: 1,
-      highAvgMismatch: 2,
-      criticalAvgMismatch: 3,
       highNoHitRate: 0.05,
       criticalNoHitRate: 0.20,
       highTwoPlusMismatchRate: 0.30,
       criticalThreePlusMismatchRate: 0.25,
-      highTerminalMismatchRate: 0.25,
+      highTerminalMismatchRate: 0.05,
       criticalTerminalMismatchRate: 0.50,
       terminalBases: 5
     };
     const riskRank = { Low: 0, Watch: 1, High: 2, Critical: 3 };
     const distCategories = [
-      { key: '0', label: '0 mismatches' },
-      { key: '1', label: '1 mismatch' },
-      { key: '2', label: '2 mismatches' },
-      { key: '3', label: '3 mismatches' },
-      { key: '4plus', label: '4+ mismatches' },
-      { key: 'no_hit', label: 'No hit' }
+      { key: '0', labelKey: 'dist_0' },
+      { key: '1', labelKey: 'dist_1' },
+      { key: '2', labelKey: 'dist_2' },
+      { key: '3', labelKey: 'dist_3' },
+      { key: '4plus', labelKey: 'dist_4plus' },
+      { key: 'no_hit', labelKey: 'dist_no_hit' }
     ];
+    const mismatchChangePalette = ['#1f7a8c', '#b42318', '#287d3c', '#b7791f', '#6f42c1', '#c2410c', '#0f766e', '#be185d', '#4d7c0f', '#0369a1', '#92400e', '#475569'];
+    const mismatchChangeColorMap = new Map();
     const filters = {
       virus: document.getElementById('filter-virus'),
       primer: document.getElementById('filter-primer'),
       fasta: document.getElementById('filter-fasta'),
-      status: document.getElementById('filter-status'),
-      mismatches: document.getElementById('filter-mismatches')
+      risk: document.getElementById('filter-risk')
     };
     let sortState = { key: 'Risk', direction: -1 };
     const primerTableState = {};
     const detailColumns = [
-      { key: 'Fasta_File', label: 'FASTA file' },
-      { key: 'Virus_Type', label: 'Virus' },
-      { key: 'Subject_Sequence_ID', label: 'Sample' },
-      { key: 'Subject_Segment', label: 'Segment' },
-      { key: 'Hit_Status', label: 'Status' },
-      { key: 'Percent_Identity', label: 'Identity' },
-      { key: 'Mismatches', label: 'Mismatches' },
-      { key: 'Mismatch_Positions', label: 'Positions' },
-      { key: 'Mismatch_Details', label: 'Mismatch bases' },
-      { key: 'Metadata_Sample_ID', label: 'Metadata ID' },
-      { key: 'Sample_Date', label: 'Sample date' },
-      { key: 'Ct_Value', label: 'Ct' },
-      { key: 'Ct_Source', label: 'Ct source' }
+      { key: 'Fasta_File', labelKey: 'detail_fasta' },
+      { key: 'Virus_Type', labelKey: 'detail_virus' },
+      { key: 'Subject_Sequence_ID', labelKey: 'detail_sample' },
+      { key: 'Subject_Segment', labelKey: 'detail_segment' },
+      { key: 'Hit_Status', labelKey: 'detail_status' },
+      { key: 'Percent_Identity', labelKey: 'detail_identity' },
+      { key: 'Mismatches', labelKey: 'detail_mismatches' },
+      { key: 'Mismatch_Positions', labelKey: 'detail_positions' },
+      { key: 'Mismatch_Details', labelKey: 'detail_bases' }
     ];
 
     function parseNumber(value) {
@@ -536,36 +956,59 @@ def build_html_report(
     function uniqueValues(key) {
       return [...new Set(rows.map(row => row[key] || '').filter(Boolean))].sort();
     }
-    function fillSelect(select, values, label) {
-      select.innerHTML = '<option value="">All ' + label + '</option>' + values.map(value => '<option>' + escapeHtml(value) + '</option>').join('');
+    function fillSelect(select, values, labelKey) {
+      select.innerHTML = '<option value="">' + t(labelKey) + '</option>' + values.map(value => '<option>' + escapeHtml(value) + '</option>').join('');
+    }
+    function fillRiskSelect() {
+      const riskValues = ['Low', 'Watch', 'High', 'Critical'];
+      filters.risk.innerHTML = '<option value="">' + t('all_risks') + '</option>' +
+        riskValues.map(risk => '<option value="' + risk + '">' + escapeHtml(t(risk.toLowerCase())) + '</option>').join('');
     }
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
     }
     function formatPercent(value) {
-      return Number.isFinite(value) ? (value * 100).toFixed(1) + '%' : 'n/a';
+      return Number.isFinite(value) ? (value * 100).toFixed(1) + '%' : t('not_available');
     }
-    function parseDateValue(value) {
-      if (!value) return null;
-      const text = String(value).trim();
-      const dmy = text.match(/^(\\d{1,2})[./-](\\d{1,2})[./-](\\d{4})$/);
-      const parsed = dmy ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])) : new Date(text);
-      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    function isNoHit(row) {
+      return row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit';
     }
-    function formatDateLabel(date) {
-      return date.toISOString().slice(0, 10);
+    function statusLabel(row) {
+      return isNoHit(row) ? t('status_no_hit') : t('status_hit');
+    }
+    function displayValue(value) {
+      return value === null || value === undefined || value === '' || value === 'n/a' ? t('not_available') : value;
+    }
+    function formatIdentityValue(value) {
+      const parsed = parseNumber(value);
+      return parsed === null ? escapeHtml(displayValue(value)) : parsed.toFixed(2);
+    }
+    function sampleBaseFromChange(change) {
+      const text = String(change || '').trim();
+      const parts = text.split('>');
+      return (parts.length > 1 ? parts[parts.length - 1] : text).toUpperCase() || 'other';
+    }
+    function colorForMismatchChange(change) {
+      const key = String(change || 'other');
+      if (!mismatchChangeColorMap.has(key)) {
+        mismatchChangeColorMap.set(key, mismatchChangePalette[mismatchChangeColorMap.size % mismatchChangePalette.length]);
+      }
+      return mismatchChangeColorMap.get(key);
     }
     function currentRows() {
-      const maxMismatches = filters.mismatches.value === '' ? null : Number(filters.mismatches.value);
-      return rows.filter(row => {
+      const baseRows = rows.filter(row => {
         if (filters.virus.value && row.Virus_Type !== filters.virus.value) return false;
         if (filters.primer.value && row.Primer_Name !== filters.primer.value) return false;
         if (filters.fasta.value && row.Fasta_File !== filters.fasta.value) return false;
-        if (filters.status.value && row.Hit_Status !== filters.status.value) return false;
-        const mismatches = numeric(row.Mismatches);
-        if (maxMismatches !== null && (mismatches === null || mismatches > maxMismatches)) return false;
         return true;
       });
+      if (!filters.risk.value) return baseRows;
+      const primersForRisk = new Set(
+        groupByPrimer(baseRows)
+          .filter(([, group]) => calculateRisk(calculatePrimerStats(group)) === filters.risk.value)
+          .map(([primer]) => primer)
+      );
+      return baseRows.filter(row => primersForRisk.has(row.Primer_Name));
     }
     function average(values) {
       const numericValues = values.map(numeric).filter(value => value !== null);
@@ -583,7 +1026,7 @@ def build_html_report(
     function calculateMismatchDistribution(group) {
       const distribution = { '0': 0, '1': 0, '2': 0, '3': 0, '4plus': 0, no_hit: 0 };
       for (const row of group) {
-        if (row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit') {
+        if (isNoHit(row)) {
           distribution.no_hit += 1;
           continue;
         }
@@ -595,7 +1038,7 @@ def build_html_report(
       return distribution;
     }
     function calculateMismatchPositionCounts(group) {
-      const hits = group.filter(row => row.Hit_Status !== 'no_hit');
+      const hits = group.filter(row => !isNoHit(row));
       const primerSequence = group.find(row => row.Primer_Sequence)?.Primer_Sequence || '';
       const counts = Array.from({ length: primerSequence.length }, () => 0);
       const detailsByPosition = new Map();
@@ -609,7 +1052,7 @@ def build_html_report(
     }
     function calculatePrimerStats(group) {
       const totalRows = group.length;
-      const hitRows = group.filter(row => row.Hit_Status !== 'no_hit' && row.Percent_Identity !== 'No hit');
+      const hitRows = group.filter(row => !isNoHit(row));
       const noHits = totalRows - hitRows.length;
       const mismatchValues = hitRows.map(row => parseNumber(row.Mismatches)).filter(value => value !== null);
       const identityValues = hitRows.map(row => parseNumber(row.Percent_Identity)).filter(value => value !== null);
@@ -620,11 +1063,11 @@ def build_html_report(
       const threePlus = mismatchValues.filter(value => value >= 3).length;
       const positionData = calculateMismatchPositionCounts(group);
       const terminalBases = RISK_THRESHOLDS.terminalBases;
-      const terminalMismatchEvents = positionData.counts.reduce((sum, count, index) => {
-        const pos = index + 1;
-        return sum + (pos <= terminalBases || pos > positionData.counts.length - terminalBases ? count : 0);
-      }, 0);
-      const totalMismatchEvents = positionData.counts.reduce((sum, count) => sum + count, 0);
+      const terminalMismatchHits = hitRows.filter(row => {
+        return parseMismatchPositions(row.Mismatch_Positions).some(pos => {
+          return pos <= terminalBases || pos > positionData.counts.length - terminalBases;
+        });
+      }).length;
       return {
         totalRows,
         hits: hitRows.length,
@@ -635,63 +1078,58 @@ def build_html_report(
         avgPercentIdentity,
         twoPlusMismatchRate: hitRows.length ? twoPlus / hitRows.length : 0,
         threePlusMismatchRate: hitRows.length ? threePlus / hitRows.length : 0,
-        terminalMismatchRate: totalMismatchEvents ? terminalMismatchEvents / totalMismatchEvents : 0,
+        terminalMismatchRate: hitRows.length ? terminalMismatchHits / hitRows.length : 0,
         distribution: calculateMismatchDistribution(group)
       };
     }
     function calculateRisk(stats) {
       if (
         stats.noHitRate >= RISK_THRESHOLDS.criticalNoHitRate ||
-        stats.avgMismatches >= RISK_THRESHOLDS.criticalAvgMismatch ||
         stats.threePlusMismatchRate >= RISK_THRESHOLDS.criticalThreePlusMismatchRate ||
         stats.terminalMismatchRate >= RISK_THRESHOLDS.criticalTerminalMismatchRate
       ) return 'Critical';
       if (
         stats.noHitRate >= RISK_THRESHOLDS.highNoHitRate ||
-        stats.avgMismatches >= RISK_THRESHOLDS.highAvgMismatch ||
         stats.twoPlusMismatchRate >= RISK_THRESHOLDS.highTwoPlusMismatchRate ||
         stats.terminalMismatchRate >= RISK_THRESHOLDS.highTerminalMismatchRate
       ) return 'High';
-      if (stats.avgMismatches >= RISK_THRESHOLDS.watchAvgMismatch || stats.maxMismatches >= 2 || stats.noHits > 0) return 'Watch';
+      if (stats.maxMismatches >= 2 || stats.noHits > 0) return 'Watch';
       return 'Low';
     }
     function riskExplanation(stats) {
       return [
-        'No-hit rate: ' + formatPercent(stats.noHitRate),
-        'Average mismatches: ' + stats.avgMismatches.toFixed(2),
-        'Max mismatches: ' + stats.maxMismatches,
-        '2+ mismatch rate: ' + formatPercent(stats.twoPlusMismatchRate),
-        '3+ mismatch rate: ' + formatPercent(stats.threePlusMismatchRate),
-        "Terminal mismatch share (5' or 3' end): " + formatPercent(stats.terminalMismatchRate)
+        t('no_hit_rate') + ': ' + formatPercent(stats.noHitRate),
+        t('max_mismatches') + ': ' + stats.maxMismatches,
+        t('two_plus_rate') + ': ' + formatPercent(stats.twoPlusMismatchRate),
+        t('three_plus_rate') + ': ' + formatPercent(stats.threePlusMismatchRate),
+        t('terminal_share') + ': ' + formatPercent(stats.terminalMismatchRate)
       ].join(' | ');
     }
     function riskBadge(risk, title) {
-      return '<span class="risk-badge risk-' + risk.toLowerCase() + '" title="' + escapeHtml(title) + '">' + risk + '</span>';
+      return '<span class="risk-badge risk-' + risk.toLowerCase() + '" title="' + escapeHtml(title) + '">' + escapeHtml(t(risk.toLowerCase())) + '</span>';
     }
     function renderCards(data) {
       const hits = data.filter(row => row.Hit_Status === 'hit').length;
       const noHits = data.filter(row => row.Hit_Status === 'no_hit').length;
       const primers = new Set(data.map(row => row.Primer_Name)).size;
       const samples = new Set(data.map(row => row.Subject_Sequence_ID)).size;
-      const metadataMatches = new Set(data.map(row => row.Metadata_Sample_ID).filter(Boolean)).size;
-      const avgIdentity = average(data.map(row => row.Percent_Identity)) || 'n/a';
+      const avgIdentity = average(data.map(row => row.Percent_Identity)) || t('not_available');
       document.getElementById('overview-cards').innerHTML = [
-        ['Rows', data.length],
-        ['Primers', primers],
-        ['Samples', samples],
-        ['Metadata matches', metadataMatches],
-        ['Hits', hits],
-        ['No hits', noHits],
-        ['Avg identity', avgIdentity]
+        [t('rows'), data.length],
+        [t('primers'), primers],
+        [t('samples'), samples],
+        [t('hits'), hits],
+        [t('no_hits'), noHits],
+        [t('avg_identity'), avgIdentity]
       ].map(([label, value]) => '<div class="card"><h3>' + label + '</h3><div class="metric">' + value + '</div></div>').join('');
     }
     function renderRiskLegend() {
       document.getElementById('risk-legend').innerHTML =
-        '<span>Risk:</span>' +
-        riskBadge('Low', 'Low risk under current thresholds') +
-        riskBadge('Watch', 'Some no-hit or mismatch signal') +
-        riskBadge('High', 'Elevated no-hit or mismatch signal') +
-        riskBadge('Critical', 'Strong no-hit, mismatch, or terminal mismatch signal');
+        '<span>' + t('risk') + ':</span>' +
+        riskBadge('Low', t('risk_low_title')) +
+        riskBadge('Watch', t('risk_watch_title')) +
+        riskBadge('High', t('risk_high_title')) +
+        riskBadge('Critical', t('risk_critical_title'));
     }
     function ampliconName(primerName) {
       const match = String(primerName || '').match(/^(.*)_(LEFT|RIGHT)(?:_\\d+)?$/i);
@@ -717,7 +1155,7 @@ def build_html_report(
         const amplicon = ampliconName(row.Primer_Name);
         if (!amplicon) continue;
         const key = (row.Assay_ID || '') + '|' + amplicon;
-        if (!grouped.has(key)) grouped.set(key, { amplicon, assayId: row.Assay_ID || '', assayName: row.Assay_Name || row.Assay_ID || 'Unnamed NGS panel', rows: [], primers: new Set(), pools: new Set() });
+        if (!grouped.has(key)) grouped.set(key, { amplicon, assayId: row.Assay_ID || '', assayName: row.Assay_Name || row.Assay_ID || t('unnamed_ngs'), rows: [], primers: new Set(), pools: new Set() });
         const group = grouped.get(key);
         group.rows.push(row);
         group.primers.add(row.Primer_Name);
@@ -746,15 +1184,16 @@ def build_html_report(
           ? (riskRank[bestLeft] >= riskRank[bestRight] ? bestLeft : bestRight)
           : 'Critical';
         const stats = calculatePrimerStats(group.rows);
-        const directionStatus = 'Forward/LEFT: ' + (leftViable ? 'viable (' + bestLeft + ')' : 'NO viable primer') +
-          ' | Reverse/RIGHT: ' + (rightViable ? 'viable (' + bestRight + ')' : 'NO viable primer');
-        const title = group.assayName + ' | ' + group.amplicon + ' | ' + directionStatus + ' | Primers: ' + [...group.primers].join(', ');
+        const directionStatus = t('direction_forward') + ': ' + (leftViable ? t('viable') + ' (' + t(bestLeft.toLowerCase()) + ')' : t('no_viable_primer')) +
+          ' | ' + t('direction_reverse') + ': ' + (rightViable ? t('viable') + ' (' + t(bestRight.toLowerCase()) + ')' : t('no_viable_primer'));
+        const title = group.assayName + ' | ' + group.amplicon + ' | ' + directionStatus + ' | ' + t('primers_label') + ': ' + [...group.primers].join(', ');
         return '<div class="amplicon-tile risk-' + risk.toLowerCase() + '" title="' + escapeHtml(title) + '">' +
           '<strong>' + escapeHtml(group.amplicon) + '</strong>' +
           riskBadge(risk, title) +
-          '<div>' + group.primers.size + ' primer' + (group.primers.size === 1 ? '' : 's') +
-          (group.pools.size ? ' · pool ' + escapeHtml([...group.pools].join(', ')) : '') + '</div>' +
-          '<div>L: ' + (leftViable ? bestLeft : 'missing') + ' · R: ' + (rightViable ? bestRight : 'missing') + '</div></div>';
+          '<div>' + group.primers.size + ' ' + (group.primers.size === 1 ? t('primer_count_singular') : t('primer_count_plural')) +
+          (group.pools.size ? ' · ' + t('pool') + ' ' + escapeHtml([...group.pools].join(', ')) : '') + '</div>' +
+          '<div>' + t('direction_forward') + ': ' + (leftViable ? t(bestLeft.toLowerCase()) : t('missing')) + '</div>' +
+          '<div>' + t('direction_reverse') + ': ' + (rightViable ? t(bestRight.toLowerCase()) : t('missing')) + '</div></div>';
       }
       const byPanel = new Map();
       for (const group of amplicons) {
@@ -767,19 +1206,20 @@ def build_html_report(
         (panel.id && panel.id !== panel.name ? ' <span class="section-note">(' + escapeHtml(panel.id) + ')</span>' : '') + '</h3>' +
         '<div class="amplicon-map">' + panel.amplicons.map(renderAmpliconTile).join('') + '</div></section>'
       ).join('');
-      target.innerHTML = '<h2>NGS Amplicon Panel Overview</h2>' +
-        '<p class="section-note">Each panel is shown separately. Alternative primers are redundant: an amplicon is critical only when it has no viable LEFT/forward primer or no viable RIGHT/reverse primer. Low and Watch primers are considered viable. Hover for details; filters also apply.</p>' +
-        '<div class="legend">' + riskBadge('Low', 'No current warning signal') + riskBadge('Watch', 'Review') + riskBadge('High', 'Elevated risk') + riskBadge('Critical', 'Strong risk signal') + '</div>' +
+      target.innerHTML = '<h2>' + t('ngs_title') + '</h2>' +
+        '<div class="report-note"><div class="note-row"><strong>' + t('ngs_note_label') + '</strong><span>' + t('ngs_note') + '</span></div></div>' +
+        '<div class="legend">' + riskBadge('Low', t('no_current_warning')) + riskBadge('Watch', t('review')) + riskBadge('High', t('elevated_risk')) + riskBadge('Critical', t('strong_risk')) + '</div>' +
         panels;
     }
     function distributionChart(distribution) {
       const total = Object.values(distribution).reduce((sum, value) => sum + value, 0);
-      if (!total) return '<div class="empty">No mismatch-count data available.</div>';
+      if (!total) return '<div class="empty">' + t('no_data_mismatch_count') + '</div>';
       return '<div class="mismatch-distribution">' + distCategories.map(category => {
         const count = distribution[category.key] || 0;
         const pct = total ? count / total : 0;
-        return '<div class="distribution-row" title="' + escapeHtml(category.label + ': ' + count + ' rows, ' + formatPercent(pct)) + '">' +
-          '<strong>' + escapeHtml(category.label) + '</strong>' +
+        const label = t(category.labelKey);
+        return '<div class="distribution-row" title="' + escapeHtml(label + ': ' + count + ' ' + t('rows_lower') + ', ' + formatPercent(pct)) + '">' +
+          '<strong>' + escapeHtml(label) + '</strong>' +
           '<div class="distribution-track"><div class="distribution-fill dist-' + category.key + '" style="width:' + Math.max(0, pct * 100) + '%"></div></div>' +
           '<span>' + count + ' (' + formatPercent(pct) + ')</span>' +
           '</div>';
@@ -788,147 +1228,79 @@ def build_html_report(
     function renderSequenceMap(group) {
       const { primerSequence, counts, detailsByPosition, hitRows } = calculateMismatchPositionCounts(group);
       if (!primerSequence || !counts.length || !hitRows || counts.every(count => count === 0)) {
-        return '<div class="plot-card"><h3>Mismatch distribution along primer sequence</h3><div class="empty">No mismatch-position data available.</div></div>';
+        return '<div class="plot-card"><h3>' + t('chart_title') + '</h3><div class="empty">' + t('chart_empty') + '</div></div>';
       }
-      const width = Math.max(560, counts.length * 26 + 96);
-      const height = 142;
-      const plotHeight = 58;
-      const left = 72;
-      const right = 18;
+      const width = Math.max(620, counts.length * 28 + 110);
+      const height = 164;
+      const plotHeight = 68;
+      const baseline = 92;
+      const left = 76;
+      const right = 20;
       const cellWidth = (width - left - right) / counts.length;
-      const maxCount = Math.max(...counts, 1);
+      const baseCountsByPosition = new Map();
+      const observedSampleBases = new Set();
+      let maxPct = 0.01;
+      for (const [pos, changes] of detailsByPosition.entries()) {
+        const baseCounts = new Map();
+        for (const [change, changeCount] of changes.entries()) {
+          const sampleBase = sampleBaseFromChange(change);
+          baseCounts.set(sampleBase, (baseCounts.get(sampleBase) || 0) + changeCount);
+          observedSampleBases.add(sampleBase);
+        }
+        baseCountsByPosition.set(pos, baseCounts);
+        const positionTotal = [...baseCounts.values()].reduce((sum, value) => sum + value, 0);
+        maxPct = Math.max(maxPct, hitRows ? positionTotal / hitRows : 0);
+      }
       const terminalBases = RISK_THRESHOLDS.terminalBases;
-      const yTicks = [0, Math.ceil(maxCount / 2), maxCount].filter((value, index, arr) => arr.indexOf(value) === index);
+      const yTicks = [0, maxPct / 2, maxPct].filter((value, index, arr) => arr.findIndex(other => Math.abs(other - value) < 0.000001) === index);
       const tickMarks = yTicks.map(value => {
-        const y = 78 - (value / maxCount) * plotHeight;
+        const y = baseline - (value / maxPct) * plotHeight;
         return '<g><line x1="' + left + '" y1="' + y.toFixed(1) + '" x2="' + (width - right) + '" y2="' + y.toFixed(1) + '" stroke="#e2e8f0"></line>' +
-          '<text class="axis-label" x="' + (left - 8) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end">' + value + '</text></g>';
+          '<text class="axis-label" x="' + (left - 8) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end">' + formatPercent(value) + '</text></g>';
       }).join('');
       const cells = counts.map((count, index) => {
         const pos = index + 1;
         const base = primerSequence[index] || '';
-        const changes = topMismatchChanges(detailsByPosition.get(pos));
-        const pct = hitRows ? count / hitRows : 0;
-        const barHeight = count ? Math.max(4, (count / maxCount) * plotHeight) : 1;
+        const baseCounts = baseCountsByPosition.get(pos) || new Map();
+        const totalCount = [...baseCounts.values()].reduce((sum, value) => sum + value, 0);
+        const totalPct = hitRows ? totalCount / hitRows : 0;
         const x = left + index * cellWidth;
-        const y = 78 - barHeight;
         const terminal = pos <= terminalBases || pos > counts.length - terminalBases;
-        const opacity = count ? Math.min(1, 0.22 + (count / maxCount) * 0.78) : 0.12;
-        return '<g><title>Position ' + pos + ', base ' + escapeHtml(base) + ': ' + count + ' mismatches (' + formatPercent(pct) + ' of hit rows)' + (changes ? '; ' + escapeHtml(changes) : '') + '</title>' +
-          '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(3, cellWidth - 4).toFixed(1) + '" height="' + barHeight.toFixed(1) + '" fill="' + (terminal ? '#b42318' : '#1f7a8c') + '" opacity="' + opacity.toFixed(2) + '"></rect>' +
-          '<text class="base-label" x="' + (x + cellWidth / 2).toFixed(1) + '" y="102" text-anchor="middle">' + escapeHtml(base) + '</text>' +
-          (pos === 1 || pos === counts.length || pos % 5 === 0 ? '<text class="axis-label" x="' + (x + cellWidth / 2).toFixed(1) + '" y="124" text-anchor="middle">' + pos + '</text>' : '') +
+        let yCursor = baseline;
+        const segments = [...baseCounts.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([sampleBase, sampleBaseCount]) => {
+            const segmentPct = hitRows ? sampleBaseCount / hitRows : 0;
+            const segmentHeight = segmentPct ? Math.max(2, (segmentPct / maxPct) * plotHeight) : 0;
+            yCursor -= segmentHeight;
+            return '<rect x="' + x.toFixed(1) + '" y="' + yCursor.toFixed(1) + '" width="' + Math.max(3, cellWidth - 5).toFixed(1) + '" height="' + segmentHeight.toFixed(1) + '" fill="' + colorForMismatchChange(sampleBase) + '"><title>' +
+              escapeHtml(t('position') + ' ' + pos + ', ' + t('sample_base') + ' ' + sampleBase + ': ' + formatPercent(segmentPct) + ' (' + sampleBaseCount + '/' + hitRows + ' ' + t('hit_rows') + ')') +
+              '</title></rect>';
+          }).join('');
+        const detailText = [...baseCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([sampleBase, sampleBaseCount]) => sampleBase + ' x' + sampleBaseCount).join(', ');
+        const title = t('position') + ' ' + pos + ', ' + t('base') + ' ' + base + ': ' + formatPercent(totalPct) + ' ' + t('with_any_mismatch') + ' (' + totalCount + '/' + hitRows + ' ' + t('hit_rows') + ')' + (detailText ? '; ' + detailText : '');
+        return '<g><title>' + escapeHtml(title) + '</title>' +
+          (segments || '<rect x="' + x.toFixed(1) + '" y="' + (baseline - 1) + '" width="' + Math.max(3, cellWidth - 5).toFixed(1) + '" height="1" fill="#d8dee9"></rect>') +
+          (terminal ? '<rect x="' + x.toFixed(1) + '" y="' + (baseline + 3) + '" width="' + Math.max(3, cellWidth - 5).toFixed(1) + '" height="3" fill="#b42318" opacity="0.5"></rect>' : '') +
+          '<text class="base-label" x="' + (x + cellWidth / 2).toFixed(1) + '" y="116" text-anchor="middle">' + escapeHtml(base) + '</text>' +
+          (pos === 1 || pos === counts.length || pos % 5 === 0 ? '<text class="axis-label" x="' + (x + cellWidth / 2).toFixed(1) + '" y="138" text-anchor="middle">' + pos + '</text>' : '') +
           '</g>';
       }).join('');
-      return '<div class="plot-card"><h3>Mismatch distribution along primer sequence</h3>' +
-        '<p class="section-note">Bars show mismatch frequency by primer position across hit rows. Hover over bars to see nucleotide-change details. The first and last ' + terminalBases + " bases mark 5' and 3' terminal regions.</p>" +
-        '<div class="primer-sequence-map"><svg class="sequence-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Mismatch distribution along primer sequence">' +
-        '<text class="axis-title" transform="translate(14 50) rotate(-90)" text-anchor="middle">count</text>' +
+      const legend = [...observedSampleBases].sort().map(sampleBase => '<span><span class="change-swatch" style="background:' + colorForMismatchChange(sampleBase) + '"></span>' + escapeHtml(t('sample_base') + ' ' + sampleBase) + '</span>').join('');
+      return '<div class="plot-card"><h3>' + t('chart_title') + '</h3>' +
+        '<div class="report-note report-note-compact">' +
+        '<div class="note-row"><strong>' + t('chart_note_what_label') + '</strong><span>' + t('chart_note_what') + '</span></div>' +
+        '<div class="note-row"><strong>' + t('chart_note_use_label') + '</strong><span>' + t('chart_note_use_prefix') + terminalBases + t('chart_note_use_suffix') + '</span></div>' +
+        '</div>' +
+        '<div class="primer-sequence-map"><svg class="sequence-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + escapeHtml(t('chart_title')) + '">' +
+        '<text class="axis-title" transform="translate(14 55) rotate(-90)" text-anchor="middle">' + escapeHtml(t('percent_axis')) + '</text>' +
         tickMarks +
-        '<text class="five-prime" x="' + (left - 25) + '" y="102">5&apos;</text><text class="three-prime" x="' + (width - 18) + '" y="102">3&apos;</text>' +
-        '<line x1="' + left + '" y1="82" x2="' + (width - right) + '" y2="82" stroke="#9aa6b2"></line>' +
+        '<text class="five-prime" x="' + (left - 25) + '" y="116">5&apos;</text><text class="three-prime" x="' + (width - 18) + '" y="116">3&apos;</text>' +
+        '<line x1="' + left + '" y1="' + baseline + '" x2="' + (width - right) + '" y2="' + baseline + '" stroke="#9aa6b2"></line>' +
         cells +
-        '</svg></div></div>';
-    }
-    function calculatePrimerTimeline(group) {
-      const byDate = new Map();
-      for (const row of group) {
-        const date = parseDateValue(row.Sample_Date);
-        if (!date) continue;
-        const ctSource = row.Ct_Source || 'Ct_Value';
-        const key = formatDateLabel(date) + '|' + ctSource;
-        if (!byDate.has(key)) byDate.set(key, { date, ctSource, rows: 0, mismatches: [], cts: [], noHits: 0 });
-        const bucket = byDate.get(key);
-        bucket.rows += 1;
-        if (row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit') bucket.noHits += 1;
-        const mismatches = parseNumber(row.Mismatches);
-        if (mismatches !== null) bucket.mismatches.push(mismatches);
-        const ct = parseNumber(row.Ct_Value);
-        if (ct !== null) bucket.cts.push(ct);
-      }
-      return [...byDate.values()].sort((a, b) => a.date - b.date).map(bucket => ({
-        date: bucket.date,
-        label: formatDateLabel(bucket.date),
-        ctSource: bucket.ctSource,
-        rows: bucket.rows,
-        noHits: bucket.noHits,
-        avgMismatches: bucket.mismatches.length ? bucket.mismatches.reduce((a, b) => a + b, 0) / bucket.mismatches.length : null,
-        avgCt: bucket.cts.length ? bucket.cts.reduce((a, b) => a + b, 0) / bucket.cts.length : null
-      }));
-    }
-    function renderTimeline(group) {
-      const points = calculatePrimerTimeline(group);
-      if (!points.length) {
-        return '<div class="plot-card"><h3>Sample timeline</h3><div class="empty">No sample-date metadata available for this primer.</div></div>';
-      }
-      const mismatchValues = points.map(point => point.avgMismatches).filter(value => value !== null);
-      const ctValues = points.map(point => point.avgCt).filter(value => value !== null);
-      if (!mismatchValues.length && !ctValues.length) {
-        return '<div class="plot-card"><h3>Sample timeline</h3><div class="empty">Sample dates are available, but no numeric mismatch or Ct values can be plotted.</div></div>';
-      }
-      const width = Math.max(560, points.length * 72 + 90);
-      const height = 230;
-      const left = 48;
-      const right = 54;
-      const top = 24;
-      const bottom = 50;
-      const plotWidth = width - left - right;
-      const plotHeight = height - top - bottom;
-      const minTime = Math.min(...points.map(point => point.date.getTime()));
-      const maxTime = Math.max(...points.map(point => point.date.getTime()));
-      const timeRange = Math.max(1, maxTime - minTime);
-      const maxMismatch = Math.max(1, ...mismatchValues, 1);
-      const minCt = ctValues.length ? Math.min(...ctValues) : 0;
-      const maxCt = ctValues.length ? Math.max(...ctValues) : 1;
-      const ctRange = Math.max(1, maxCt - minCt);
-      const x = point => left + ((point.date.getTime() - minTime) / timeRange) * plotWidth;
-      const yMismatch = value => top + plotHeight - (value / maxMismatch) * plotHeight;
-      const yCt = value => top + plotHeight - ((value - minCt) / ctRange) * plotHeight;
-      const mismatchTicks = [0, maxMismatch / 2, maxMismatch];
-      const ctTicks = ctValues.length ? [minCt, minCt + ctRange / 2, maxCt] : [];
-      const yAxisTicks = mismatchTicks.map(value => {
-        const y = yMismatch(value);
-        return '<g><line x1="' + left + '" y1="' + y.toFixed(1) + '" x2="' + (width - right) + '" y2="' + y.toFixed(1) + '" stroke="#e2e8f0"></line>' +
-          '<text class="timeline-label" x="' + (left - 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + value.toFixed(maxMismatch < 2 ? 1 : 0) + '</text></g>';
-      }).join('') + ctTicks.map(value => {
-        const y = yCt(value);
-        return '<text class="timeline-label" x="' + (width - right + 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="start">' + value.toFixed(1) + '</text>';
-      }).join('');
-      const mismatchPolyline = points
-        .filter(point => point.avgMismatches !== null)
-        .map(point => x(point).toFixed(1) + ',' + yMismatch(point.avgMismatches).toFixed(1))
-        .join(' ');
-      const ctPolyline = points
-        .filter(point => point.avgCt !== null)
-        .map(point => x(point).toFixed(1) + ',' + yCt(point.avgCt).toFixed(1))
-        .join(' ');
-      const labels = points.map((point, index) => {
-        if (index !== 0 && index !== points.length - 1 && index % Math.ceil(points.length / 6) !== 0) return '';
-        return '<text class="timeline-label" x="' + x(point).toFixed(1) + '" y="' + (height - 16) + '" text-anchor="middle">' + escapeHtml(point.label) + '</text>';
-      }).join('');
-      const mismatchDots = points.filter(point => point.avgMismatches !== null).map(point =>
-        '<circle class="timeline-point-mismatch" cx="' + x(point).toFixed(1) + '" cy="' + yMismatch(point.avgMismatches).toFixed(1) + '" r="4"><title>' +
-        escapeHtml(point.label + ': avg mismatches ' + point.avgMismatches.toFixed(2) + ', rows ' + point.rows + ', no-hit rows ' + point.noHits) +
-        '</title></circle>'
-      ).join('');
-      const ctDots = points.filter(point => point.avgCt !== null).map(point =>
-        '<circle class="timeline-point-ct" cx="' + x(point).toFixed(1) + '" cy="' + yCt(point.avgCt).toFixed(1) + '" r="4"><title>' +
-        escapeHtml(point.label + ': avg Ct ' + point.avgCt.toFixed(2) + ' from ' + point.ctSource + ', rows ' + point.rows) +
-        '</title></circle>'
-      ).join('');
-      const ctSources = [...new Set(points.map(point => point.ctSource).filter(Boolean))].join(', ');
-      return '<div class="plot-card"><h3>Sample timeline</h3>' +
-        '<p class="section-note">Average mismatches and selected assay-specific Ct values by sample date for the current filter. Use this to check whether primer mismatches accumulate over time and whether Ct values remain stable.' + (ctSources ? ' Ct source: ' + escapeHtml(ctSources) + '.' : '') + '</p>' +
-        '<div class="timeline-plot"><svg class="timeline-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Primer mismatch and Ct timeline">' +
-        '<line class="timeline-axis" x1="' + left + '" y1="' + (top + plotHeight) + '" x2="' + (width - right) + '" y2="' + (top + plotHeight) + '"></line>' +
-        '<line class="timeline-axis" x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '"></line>' +
-        '<line class="timeline-axis" x1="' + (width - right) + '" y1="' + top + '" x2="' + (width - right) + '" y2="' + (top + plotHeight) + '"></line>' +
-        '<text class="timeline-label" x="8" y="' + top + '">mismatch</text><text class="timeline-label" x="' + (width - 44) + '" y="' + top + '">Ct</text>' +
-        yAxisTicks +
-        (mismatchPolyline ? '<polyline class="timeline-mismatch" points="' + mismatchPolyline + '"></polyline>' : '') +
-        (ctPolyline ? '<polyline class="timeline-ct" points="' + ctPolyline + '"></polyline>' : '') +
-        mismatchDots + ctDots + labels +
-        '</svg></div><div class="timeline-legend"><span><strong style="color:var(--bad)">solid</strong> avg mismatches</span><span><strong style="color:var(--accent)">dashed</strong> avg Ct</span></div></div>';
+        '</svg></div>' +
+        (legend ? '<div class="change-legend">' + legend + '</div>' : '') +
+        '</div>';
     }
     function summaryRows(data) {
       return groupByPrimer(data).map(([primer, group]) => {
@@ -945,39 +1317,49 @@ def build_html_report(
           Hits: stats.hits,
           No_Hits: stats.noHits,
           No_Hit_Rate: formatPercent(stats.noHitRate),
-          Avg_Mismatches: stats.hits ? stats.avgMismatches.toFixed(2) : 'n/a',
           Max_Mismatches: stats.maxMismatches,
-          Avg_Percent_Identity: stats.avgPercentIdentity === null ? 'n/a' : stats.avgPercentIdentity.toFixed(2),
+          Avg_Percent_Identity: stats.avgPercentIdentity === null ? t('not_available') : stats.avgPercentIdentity.toFixed(2),
           TwoPlus_Rate: formatPercent(stats.twoPlusMismatchRate),
           ThreePlus_Rate: formatPercent(stats.threePlusMismatchRate),
           Terminal_Mismatch_Share: formatPercent(stats.terminalMismatchRate)
         };
       });
     }
+    function safeDomId(value) {
+      return String(value).replace(/[^A-Za-z0-9_-]/g, '_');
+    }
+    function primerPanelId(primer) {
+      return 'primer-panel-' + safeDomId(primer);
+    }
     function primerTableId(primer) {
-      return 'primer-table-' + String(primer).replace(/[^A-Za-z0-9_-]/g, '_');
+      return 'primer-table-' + safeDomId(primer);
     }
     function primerState(primer) {
       if (!primerTableState[primer]) {
-        primerTableState[primer] = { expanded: false, sortKey: 'Mismatches', direction: -1 };
+        primerTableState[primer] = { expanded: false, sortKey: null, direction: -1 };
       }
       return primerTableState[primer];
     }
     function valueForSort(row, key) {
-      if (key === 'Mismatches') {
-        if (row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit') return Number.NEGATIVE_INFINITY;
-        return parseNumber(row.Mismatches) ?? Number.NEGATIVE_INFINITY;
-      }
+      if (key === 'Mismatches') return parseNumber(row.Mismatches) ?? Number.NEGATIVE_INFINITY;
       if (key === 'Percent_Identity') return parseNumber(row.Percent_Identity) ?? Number.NEGATIVE_INFINITY;
+      if (key === 'Hit_Status') return statusLabel(row);
       return row[key] || '';
     }
     function sortedDetailRows(group, state) {
+      if (!state.sortKey) {
+        return [...group].sort((a, b) => {
+          const aNoHit = isNoHit(a);
+          const bNoHit = isNoHit(b);
+          if (aNoHit !== bNoHit) return aNoHit ? -1 : 1;
+          if (!aNoHit && !bNoHit) {
+            const mismatchDelta = (parseNumber(b.Mismatches) ?? Number.NEGATIVE_INFINITY) - (parseNumber(a.Mismatches) ?? Number.NEGATIVE_INFINITY);
+            if (mismatchDelta) return mismatchDelta;
+          }
+          return String(a.Subject_Sequence_ID || '').localeCompare(String(b.Subject_Sequence_ID || ''));
+        });
+      }
       return [...group].sort((a, b) => {
-        if (state.sortKey !== 'Hit_Status') {
-          const aNoHit = a.Hit_Status === 'no_hit' || a.Percent_Identity === 'No hit';
-          const bNoHit = b.Hit_Status === 'no_hit' || b.Percent_Identity === 'No hit';
-          if (aNoHit !== bNoHit) return aNoHit ? 1 : -1;
-        }
         const left = valueForSort(a, state.sortKey);
         const right = valueForSort(b, state.sortKey);
         if (typeof left === 'number' && typeof right === 'number') return (left - right) * state.direction;
@@ -1036,17 +1418,17 @@ def build_html_report(
       const body = document.getElementById('alignment-modal-body');
       const query = row.Query_Alignment || row.Primer_Sequence || '';
       const subject = row.Subject_Alignment || '';
-      title.textContent = row.Subject_Sequence_ID || 'Sample alignment';
-      meta.textContent = [row.Primer_Name, row.Fasta_File, row.Hit_Status, row.Mismatches ? row.Mismatches + ' mismatches' : '', row.Mismatch_Details || ''].filter(Boolean).join(' | ');
-      if (row.Hit_Status === 'no_hit' || !subject) {
-        body.innerHTML = '<div class="empty">No alignment is available for this row.</div>';
+      title.textContent = row.Subject_Sequence_ID || t('modal_title');
+      meta.textContent = [row.Primer_Name, row.Fasta_File, statusLabel(row), row.Mismatches ? row.Mismatches + ' ' + t('mismatches_word') : '', row.Mismatch_Details || ''].filter(Boolean).join(' | ');
+      if (isNoHit(row) || !subject) {
+        body.innerHTML = '<div class="empty">' + t('no_alignment') + '</div>';
       } else {
         const matchLine = alignmentMatchLine(query, subject);
         body.innerHTML = '<div class="alignment-view">' +
-          '<div class="alignment-row"><strong>Primer</strong><span>' + escapeHtml(query) + '</span></div>' +
+          '<div class="alignment-row"><strong>' + t('primer') + '</strong><span>' + escapeHtml(query) + '</span></div>' +
           '<div class="alignment-row alignment-matchline"><strong></strong><span>' + escapeHtml(matchLine) + '</span></div>' +
-          '<div class="alignment-row"><strong>Sample</strong><span>' + escapeHtml(subject) + '</span></div>' +
-          '</div><p class="section-note">Mismatch details: ' + escapeHtml(row.Mismatch_Details || 'none') + '</p>';
+          '<div class="alignment-row"><strong>' + t('sample') + '</strong><span>' + escapeHtml(subject) + '</span></div>' +
+          '</div><p class="section-note">' + t('mismatch_details') + ': ' + escapeHtml(row.Mismatch_Details || t('none')) + '</p>';
       }
       modal.classList.add('open');
     }
@@ -1061,19 +1443,20 @@ def build_html_report(
       const hiddenCount = Math.max(0, sortedRows.length - visibleRows.length);
       const rowsHtml = visibleRows.map(row => '<tr>' +
         detailColumns.map(col => {
-          if (col.key === 'Hit_Status') return '<td><span class="badge ' + escapeHtml(row[col.key]) + '">' + escapeHtml(row[col.key]) + '</span></td>';
-          if (col.key === 'Subject_Sequence_ID') return '<td><button class="alignment-button" type="button" data-alignment-key="' + escapeHtml(rowKey(row)) + '">' + escapeHtml(row[col.key] ?? '') + '</button></td>';
-          return '<td>' + escapeHtml(row[col.key] ?? '') + '</td>';
+          if (col.key === 'Hit_Status') return '<td><span class="badge ' + escapeHtml(row[col.key]) + '">' + escapeHtml(statusLabel(row)) + '</span></td>';
+          if (col.key === 'Subject_Sequence_ID') return '<td><button class="alignment-button" type="button" data-alignment-key="' + escapeHtml(rowKey(row)) + '" title="' + escapeHtml(t('open_alignment', { sample: row[col.key] || t('not_available') })) + '">' + escapeHtml(displayValue(row[col.key])) + '</button></td>';
+          if (col.key === 'Percent_Identity') return '<td>' + formatIdentityValue(row[col.key]) + '</td>';
+          return '<td>' + escapeHtml(displayValue(row[col.key])) + '</td>';
         }).join('') +
         '</tr>').join('');
-      return '<div class="table-actions">' +
-          '<span>Sample rows sorted by highest mismatch count by default. Showing ' + visibleRows.length + ' of ' + sortedRows.length + ' rows.</span>' +
-          (sortedRows.length > 10 ? '<button class="table-toggle" type="button" data-table-toggle="' + escapeHtml(primer) + '">' + (state.expanded ? 'Show top 10' : 'Show all ' + sortedRows.length) + '</button>' : '') +
+      return '<div class="report-note report-note-compact">' +
+          '<div class="note-row"><strong>' + t('detail_table_note_label') + '</strong><span>' + t('sample_rows_sorted', { visible: visibleRows.length, total: sortedRows.length }) + '</span></div>' +
+          (sortedRows.length > 10 ? '<button class="table-toggle" type="button" data-table-toggle="' + escapeHtml(primer) + '">' + (state.expanded ? t('show_top_10') : t('show_all', { total: sortedRows.length })) + '</button>' : '') +
         '</div>' +
         '<div class="table-wrap" style="margin-top:12px"><table class="primer-detail-table" id="' + tableId + '"><thead><tr>' +
-          detailColumns.map(col => '<th data-primer="' + escapeHtml(primer) + '" data-detail-sort="' + col.key + '">' + escapeHtml(col.label) + (state.sortKey === col.key ? (state.direction > 0 ? ' ▲' : ' ▼') : '') + '</th>').join('') +
+          detailColumns.map(col => '<th data-primer="' + escapeHtml(primer) + '" data-detail-sort="' + col.key + '">' + escapeHtml(t(col.labelKey)) + (state.sortKey === col.key ? (state.direction > 0 ? ' ▲' : ' ▼') : '') + '</th>').join('') +
           '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' +
-        (hiddenCount ? '<div class="review-reason">' + hiddenCount + ' lower-priority rows are hidden. Expand to inspect all rows.</div>' : '');
+        (hiddenCount ? '<div class="review-reason">' + t('lower_priority_hidden', { count: hiddenCount }) + '</div>' : '');
     }
     function renderSummary(data) {
       const groups = summaryRows(data);
@@ -1086,10 +1469,17 @@ def build_html_report(
         if (Number.isFinite(leftNum) && Number.isFinite(rightNum)) return (leftNum - rightNum) * sortState.direction;
         return String(left).localeCompare(String(right)) * sortState.direction;
       });
-      const columns = ['Risk', 'Primer_Name', 'Virus_Type', 'Primer_Segment', 'Rows', 'Hits', 'No_Hits', 'No_Hit_Rate', 'Avg_Mismatches', 'Max_Mismatches', 'Avg_Percent_Identity', 'TwoPlus_Rate', 'ThreePlus_Rate', 'Terminal_Mismatch_Share'];
+      const columns = ['Risk', 'Primer_Name', 'Virus_Type', 'Primer_Segment', 'Rows', 'Hits', 'No_Hits', 'No_Hit_Rate', 'Max_Mismatches', 'Avg_Percent_Identity', 'TwoPlus_Rate', 'ThreePlus_Rate', 'Terminal_Mismatch_Share'];
+      function summaryCellHtml(row, col) {
+        if (col === 'Risk') return riskBadge(row.Risk, row.Risk_Title);
+        if (col === 'Primer_Name') {
+          return '<a class="primer-link" href="#' + primerPanelId(row.Primer_Name) + '" title="' + escapeHtml(t('jump_to_primer')) + '">' + escapeHtml(row.Primer_Name) + '</a>';
+        }
+        return escapeHtml(row[col]);
+      }
       document.getElementById('summary-table').innerHTML =
-        '<thead><tr>' + columns.map(col => '<th data-sort="' + col + '">' + col.replaceAll('_', ' ') + '</th>').join('') + '</tr></thead>' +
-        '<tbody>' + groups.map(row => '<tr class="risk-' + row.Risk.toLowerCase() + '-row">' + columns.map(col => '<td>' + (col === 'Risk' ? riskBadge(row.Risk, row.Risk_Title) : escapeHtml(row[col])) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+        '<thead><tr>' + columns.map(col => '<th data-sort="' + col + '">' + t('col_' + col) + '</th>').join('') + '</tr></thead>' +
+        '<tbody>' + groups.map(row => '<tr class="risk-' + row.Risk.toLowerCase() + '-row">' + columns.map(col => '<td>' + summaryCellHtml(row, col) + '</td>').join('') + '</tr>').join('') + '</tbody>';
       document.querySelectorAll('#summary-table th').forEach(th => th.addEventListener('click', () => {
         const key = th.dataset.sort;
         sortState.direction = sortState.key === key ? sortState.direction * -1 : 1;
@@ -1097,59 +1487,30 @@ def build_html_report(
         render();
       }));
     }
-    function renderPreviousReports(data) {
-      const target = document.getElementById('previous-reports');
-      if (!previousReports.length) {
-        target.innerHTML = '<div class="empty">No previous CSV reports were attached when this HTML was generated.</div>';
-        return;
-      }
-      const currentByPrimer = new Map(summaryRows(data).map(row => [row.Primer_Name, row]));
-      target.innerHTML = previousReports.map(report => {
-        const reportRows = report.rows || [];
-        const summary = summaryRows(reportRows);
-        const totalRows = reportRows.length;
-        const primers = new Set(reportRows.map(row => row.Primer_Name)).size;
-        const noHits = reportRows.filter(row => row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit').length;
-        const avgMismatch = average(reportRows.map(row => row.Mismatches)) || 'n/a';
-        const risky = summary.filter(row => riskRank[row.Risk] >= riskRank.Watch).slice(0, 5);
-        const warnings = (report.warnings || []).map(warning => '<div class="empty">' + escapeHtml(warning) + '</div>').join('');
-        const comparisonRows = summary.filter(row => currentByPrimer.has(row.Primer_Name)).slice(0, 8).map(previous => {
-          const current = currentByPrimer.get(previous.Primer_Name);
-          const currentMismatch = parseNumber(current.Avg_Mismatches);
-          const previousMismatch = parseNumber(previous.Avg_Mismatches);
-          const mismatchDelta = currentMismatch !== null && previousMismatch !== null ? currentMismatch - previousMismatch : null;
-          return '<tr><td>' + escapeHtml(previous.Primer_Name) + '</td><td>' + escapeHtml(previous.Avg_Mismatches) + '</td><td>' + escapeHtml(current.Avg_Mismatches) + '</td><td class="' + (mismatchDelta > 0 ? 'delta-up' : mismatchDelta < 0 ? 'delta-down' : '') + '">' + (mismatchDelta === null ? 'n/a' : mismatchDelta.toFixed(2)) + '</td><td>' + escapeHtml(previous.No_Hit_Rate) + '</td><td>' + escapeHtml(current.No_Hit_Rate) + '</td></tr>';
-        }).join('');
-        return '<article class="previous-report-panel"><h3>' + escapeHtml(report.name || report.path || 'Previous report') + '</h3>' +
-          warnings +
-          '<div class="primer-grid"><div>Rows<strong><br>' + totalRows + '</strong></div><div>Primers<strong><br>' + primers + '</strong></div><div>No-hit rate<strong><br>' + formatPercent(totalRows ? noHits / totalRows : 0) + '</strong></div><div>Avg mismatches<strong><br>' + avgMismatch + '</strong></div></div>' +
-          '<p class="section-note">Top risky primers: ' + (risky.length ? risky.map(row => escapeHtml(row.Primer_Name) + ' (' + row.Risk + ')').join(', ') : 'none') + '</p>' +
-          (comparisonRows ? '<div class="table-wrap"><table class="comparison-table"><thead><tr><th>Primer</th><th>Previous avg mismatches</th><th>Current avg mismatches</th><th>Delta</th><th>Previous no-hit rate</th><th>Current no-hit rate</th></tr></thead><tbody>' + comparisonRows + '</tbody></table></div>' : '<div class="empty">No overlapping primer names found for comparison with current filtered rows.</div>') +
-          '</article>';
-      }).join('');
-    }
     function renderPrimerPanels(data) {
       const panels = groupByPrimer(data).map(([primer, group]) => {
         const stats = calculatePrimerStats(group);
         const risk = calculateRisk(stats);
         const hitPercent = group.length ? Math.round((stats.hits / group.length) * 100) : 0;
-        return '<article class="primer-panel risk-' + risk.toLowerCase() + '-panel"><h3>' + escapeHtml(primer) + ' ' + riskBadge(risk, riskExplanation(stats)) + '</h3>' +
+        return '<article class="primer-panel risk-' + risk.toLowerCase() + '-panel" id="' + primerPanelId(primer) + '"><h3>' + escapeHtml(primer) + ' ' + riskBadge(risk, riskExplanation(stats)) + '</h3>' +
           '<div class="primer-grid">' +
-          '<div>Rows<strong><br>' + group.length + '</strong></div>' +
-          '<div>Hits<strong><br>' + stats.hits + '</strong></div>' +
-          '<div>No hits<strong><br>' + stats.noHits + '</strong></div>' +
-          '<div>Avg mismatches<strong><br>' + (stats.hits ? stats.avgMismatches.toFixed(2) : 'n/a') + '</strong></div>' +
-          '<div>Max mismatches<strong><br>' + stats.maxMismatches + '</strong></div>' +
-          '<div>Avg identity<strong><br>' + (stats.avgPercentIdentity === null ? 'n/a' : stats.avgPercentIdentity.toFixed(2)) + '</strong></div>' +
-          '<div>Terminal mismatch share<strong><br>' + formatPercent(stats.terminalMismatchRate) + '</strong></div>' +
-          '</div><div class="bar" aria-label="Hit percentage"><span style="width:' + hitPercent + '%"></span></div>' +
+          '<div>' + t('rows') + '<strong><br>' + group.length + '</strong></div>' +
+          '<div>' + t('hits') + '<strong><br>' + stats.hits + '</strong></div>' +
+          '<div>' + t('no_hits') + '<strong><br>' + stats.noHits + '</strong></div>' +
+          '<div>' + t('max_mismatches') + '<strong><br>' + stats.maxMismatches + '</strong></div>' +
+          '<div>' + t('avg_identity') + '<strong><br>' + (stats.avgPercentIdentity === null ? t('not_available') : stats.avgPercentIdentity.toFixed(2)) + '</strong></div>' +
+          '<div>' + t('two_plus_rate') + '<strong><br>' + formatPercent(stats.twoPlusMismatchRate) + '</strong></div>' +
+          '<div>' + t('three_plus_rate') + '<strong><br>' + formatPercent(stats.threePlusMismatchRate) + '</strong></div>' +
+          '<div>' + t('terminal_share') + '<strong><br>' + formatPercent(stats.terminalMismatchRate) + '</strong></div>' +
+          '</div><div class="section-note">' + t('hit_rate_label', { percent: hitPercent + '%' }) + '</div><div class="bar" aria-label="' + escapeHtml(t('hit_rate_aria', { percent: hitPercent + '%' })) + '"><span style="width:' + hitPercent + '%"></span></div>' +
           renderSequenceMap(group) +
-          renderTimeline(group) +
-          '<div class="plot-card"><h3>Mismatch count distribution for this primer</h3>' + distributionChart(stats.distribution) + '</div>' +
+          '<div class="plot-card"><h3>' + t('mismatch_distribution_title') + '</h3>' +
+          '<div class="report-note report-note-compact"><div class="note-row"><strong>' + t('distribution_note_label') + '</strong><span>' + t('distribution_note') + '</span></div></div>' +
+          distributionChart(stats.distribution) + '</div>' +
           renderDetailTable(primer, group) +
           '</article>';
       }).join('');
-      document.getElementById('primer-panels').innerHTML = panels || '<div class="empty">No rows match the current filters.</div>';
+      document.getElementById('primer-panels').innerHTML = panels || '<div class="empty">' + t('no_rows_match') + '</div>';
       document.querySelectorAll('[data-detail-sort]').forEach(th => th.addEventListener('click', () => {
         const primer = th.dataset.primer;
         const state = primerState(primer);
@@ -1175,14 +1536,34 @@ def build_html_report(
       renderNgsPanelOverview(data);
       renderRiskLegend();
       renderSummary(data);
-      renderPreviousReports(data);
       renderPrimerPanels(data);
     }
-    fillSelect(filters.virus, uniqueValues('Virus_Type'), 'organisms');
-    fillSelect(filters.primer, uniqueValues('Primer_Name'), 'primers');
-    fillSelect(filters.fasta, uniqueValues('Fasta_File'), 'FASTA files');
-    fillSelect(filters.status, uniqueValues('Hit_Status'), 'statuses');
+    function populateFilterOptions() {
+      fillSelect(filters.virus, uniqueValues('Virus_Type'), 'all_organisms');
+      fillSelect(filters.primer, uniqueValues('Primer_Name'), 'all_primers');
+      fillSelect(filters.fasta, uniqueValues('Fasta_File'), 'all_fasta');
+      fillRiskSelect();
+    }
+    populateFilterOptions();
     Object.values(filters).forEach(control => control.addEventListener('input', render));
+    document.querySelectorAll('[data-language]').forEach(button => button.addEventListener('click', () => {
+      currentLanguage = button.dataset.language;
+      const selected = { virus: filters.virus.value, primer: filters.primer.value, fasta: filters.fasta.value, risk: filters.risk.value };
+      applyTranslations();
+      populateFilterOptions();
+      filters.virus.value = selected.virus;
+      filters.primer.value = selected.primer;
+      filters.fasta.value = selected.fasta;
+      filters.risk.value = selected.risk;
+      render();
+    }));
+    document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => {
+      const selected = button.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === selected));
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.hidden = panel.id !== selected + '-tab';
+      });
+    }));
     document.getElementById('alignment-modal-close').addEventListener('click', closeAlignmentModal);
     document.getElementById('alignment-modal').addEventListener('click', event => {
       if (event.target.id === 'alignment-modal') closeAlignmentModal();
@@ -1190,6 +1571,7 @@ def build_html_report(
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') closeAlignmentModal();
     });
+    applyTranslations();
     render();
   </script>
 </body>
@@ -1199,7 +1581,7 @@ def build_html_report(
         template
         .replace("__REPORT_TITLE__", escaped_title)
         .replace("__REPORT_DATA__", data_json)
-        .replace("__PREVIOUS_REPORT_DATA__", previous_json)
+        .replace("__TRANSLATIONS_JSON__", translations_json)
         .replace("__FIELDS_JSON__", fields_json)
     )
 
@@ -1209,8 +1591,9 @@ def write_html_report(results: list[dict], output_file: str, previous_reports: l
         print("No results to write to HTML report.", file=sys.stderr)
         return
     try:
+        report_html = build_html_report(results, previous_reports=previous_reports)
         with open(output_file, "w", encoding="utf-8") as htmlfile:
-            htmlfile.write(build_html_report(results, previous_reports=previous_reports))
+            htmlfile.write(report_html)
         print(f"HTML report successfully written to {output_file}")
     except Exception as e:
         print(f"Error writing HTML report: {e}", file=sys.stderr)
