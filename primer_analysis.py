@@ -1714,6 +1714,7 @@ def process_fasta_file(
                     "Fasta_File": os.path.basename(fasta_file),
                     "Virus_Type": virus_type,
                     "Primer_Name": primer.name,
+                    "Primer_Role": primer.role,
                     "Primer_Sequence": primer_seq,
                     "Primer_Segment": primer.segment,
                     "Subject_Sequence_ID": hit["sseqid"],
@@ -1739,6 +1740,7 @@ def process_fasta_file(
                     "Fasta_File": os.path.basename(fasta_file),
                     "Virus_Type": virus_type,
                     "Primer_Name": primer.name,
+                    "Primer_Role": primer.role,
                     "Primer_Sequence": primer_seq,
                     "Primer_Segment": primer.segment,
                     "Subject_Sequence_ID": subject,
@@ -1772,7 +1774,7 @@ def write_csv_report(results: list, output_file: str):
 
     try:
         with open(output_file, "w", newline="") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES)
+            writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
             writer.writeheader()
             for row in results:
                 writer.writerow(row)

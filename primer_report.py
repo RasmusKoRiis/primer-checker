@@ -9,7 +9,7 @@ import re
 import sys
 from pathlib import Path
 
-from primer_analysis import CSV_FIELDNAMES
+from primer_analysis import CSV_FIELDNAMES, infer_primer_role
 
 REPORT_TEXT_DIRECTORY = Path(__file__).resolve().parent / "report_text"
 REPORT_TEXT_FILES = {
@@ -24,7 +24,7 @@ METADATA_REPORT_FIELDNAMES = {
     "Ct_Value",
     "Ct_Source",
 }
-REPORT_FIELDNAMES = [field for field in CSV_FIELDNAMES if field not in METADATA_REPORT_FIELDNAMES]
+REPORT_FIELDNAMES = [field for field in CSV_FIELDNAMES if field not in METADATA_REPORT_FIELDNAMES] + ["Primer_Role"]
 
 
 def load_report_translations(
@@ -98,6 +98,12 @@ def _json_for_inline_script(value) -> str:
     )
 
 
+def prepare_report_row(row: dict) -> dict:
+    prepared = {field: row.get(field, "") for field in REPORT_FIELDNAMES}
+    prepared["Primer_Role"] = prepared["Primer_Role"] or infer_primer_role(prepared["Primer_Name"])
+    return prepared
+
+
 def safe_number(value):
     if value in ("", None, "No hit"):
         return None
@@ -125,7 +131,7 @@ def load_previous_report_csv(path: str) -> dict:
             if missing_fields:
                 report["warnings"].append(f"Missing expected column(s): {', '.join(missing_fields)}.")
             for row in reader:
-                report["rows"].append({field: row.get(field, "") for field in CSV_FIELDNAMES})
+                report["rows"].append(prepare_report_row(row))
     except Exception as e:
         report["warnings"].append(f"Could not read CSV: {e}")
     return report
@@ -143,12 +149,12 @@ def build_html_report(
     """Build a self-contained HTML report with embedded result data."""
     report_rows = []
     for row in results:
-        report_rows.append({field: row.get(field, "") for field in REPORT_FIELDNAMES})
+        report_rows.append(prepare_report_row(row))
 
     previous_reports = [
         {
             **report,
-            "rows": [{field: row.get(field, "") for field in REPORT_FIELDNAMES} for row in report.get("rows", [])],
+            "rows": [prepare_report_row(row) for row in report.get("rows", [])],
         }
         for report in (previous_reports or [])
     ]
@@ -1023,6 +1029,22 @@ def build_html_report(
       }
       return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     }
+    function roleForRow(row) {
+      const explicitRole = String(row.Primer_Role || '').toLowerCase();
+      if (explicitRole === 'probe') return 'probe';
+      const tokens = String(row.Primer_Name || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+      return tokens.some(token => token.includes('PROBE') || ['TM', 'VIC2', 'YAM2'].includes(token)) ? 'probe' : 'primer';
+    }
+    function terminalMismatchPosition(position, sequenceLength, role) {
+      const terminalBases = RISK_THRESHOLDS.terminalBases;
+      return role === 'probe' ? position <= terminalBases : position > sequenceLength - terminalBases;
+    }
+    function terminalLabelKey(role) {
+      return role === 'probe' ? 'terminal_share_probe' : 'terminal_share_primer';
+    }
+    function chartNoteKey(role) {
+      return role === 'probe' ? 'chart_note_use_probe' : 'chart_note_use_primer';
+    }
     function calculateMismatchDistribution(group) {
       const distribution = { '0': 0, '1': 0, '2': 0, '3': 0, '4plus': 0, no_hit: 0 };
       for (const row of group) {
@@ -1052,6 +1074,7 @@ def build_html_report(
     }
     function calculatePrimerStats(group) {
       const totalRows = group.length;
+      const role = roleForRow(group[0] || {});
       const hitRows = group.filter(row => !isNoHit(row));
       const noHits = totalRows - hitRows.length;
       const mismatchValues = hitRows.map(row => parseNumber(row.Mismatches)).filter(value => value !== null);
@@ -1065,7 +1088,7 @@ def build_html_report(
       const terminalBases = RISK_THRESHOLDS.terminalBases;
       const terminalMismatchHits = hitRows.filter(row => {
         return parseMismatchPositions(row.Mismatch_Positions).some(pos => {
-          return pos <= terminalBases || pos > positionData.counts.length - terminalBases;
+          return terminalMismatchPosition(pos, positionData.counts.length, role);
         });
       }).length;
       return {
@@ -1079,6 +1102,7 @@ def build_html_report(
         twoPlusMismatchRate: hitRows.length ? twoPlus / hitRows.length : 0,
         threePlusMismatchRate: hitRows.length ? threePlus / hitRows.length : 0,
         terminalMismatchRate: hitRows.length ? terminalMismatchHits / hitRows.length : 0,
+        terminalRole: role,
         distribution: calculateMismatchDistribution(group)
       };
     }
@@ -1102,7 +1126,7 @@ def build_html_report(
         t('max_mismatches') + ': ' + stats.maxMismatches,
         t('two_plus_rate') + ': ' + formatPercent(stats.twoPlusMismatchRate),
         t('three_plus_rate') + ': ' + formatPercent(stats.threePlusMismatchRate),
-        t('terminal_share') + ': ' + formatPercent(stats.terminalMismatchRate)
+        t(terminalLabelKey(stats.terminalRole)) + ': ' + formatPercent(stats.terminalMismatchRate)
       ].join(' | ');
     }
     function riskBadge(risk, title) {
@@ -1227,6 +1251,7 @@ def build_html_report(
     }
     function renderSequenceMap(group) {
       const { primerSequence, counts, detailsByPosition, hitRows } = calculateMismatchPositionCounts(group);
+      const role = roleForRow(group[0] || {});
       if (!primerSequence || !counts.length || !hitRows || counts.every(count => count === 0)) {
         return '<div class="plot-card"><h3>' + t('chart_title') + '</h3><div class="empty">' + t('chart_empty') + '</div></div>';
       }
@@ -1265,7 +1290,7 @@ def build_html_report(
         const totalCount = [...baseCounts.values()].reduce((sum, value) => sum + value, 0);
         const totalPct = hitRows ? totalCount / hitRows : 0;
         const x = left + index * cellWidth;
-        const terminal = pos <= terminalBases || pos > counts.length - terminalBases;
+        const terminal = terminalMismatchPosition(pos, counts.length, role);
         let yCursor = baseline;
         const segments = [...baseCounts.entries()]
           .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -1290,7 +1315,7 @@ def build_html_report(
       return '<div class="plot-card"><h3>' + t('chart_title') + '</h3>' +
         '<div class="report-note report-note-compact">' +
         '<div class="note-row"><strong>' + t('chart_note_what_label') + '</strong><span>' + t('chart_note_what') + '</span></div>' +
-        '<div class="note-row"><strong>' + t('chart_note_use_label') + '</strong><span>' + t('chart_note_use_prefix') + terminalBases + t('chart_note_use_suffix') + '</span></div>' +
+        '<div class="note-row"><strong>' + t('chart_note_use_label') + '</strong><span>' + t(chartNoteKey(role)) + '</span></div>' +
         '</div>' +
         '<div class="primer-sequence-map"><svg class="sequence-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + escapeHtml(t('chart_title')) + '">' +
         '<text class="axis-title" transform="translate(14 55) rotate(-90)" text-anchor="middle">' + escapeHtml(t('percent_axis')) + '</text>' +
@@ -1501,7 +1526,7 @@ def build_html_report(
           '<div>' + t('avg_identity') + '<strong><br>' + (stats.avgPercentIdentity === null ? t('not_available') : stats.avgPercentIdentity.toFixed(2)) + '</strong></div>' +
           '<div>' + t('two_plus_rate') + '<strong><br>' + formatPercent(stats.twoPlusMismatchRate) + '</strong></div>' +
           '<div>' + t('three_plus_rate') + '<strong><br>' + formatPercent(stats.threePlusMismatchRate) + '</strong></div>' +
-          '<div>' + t('terminal_share') + '<strong><br>' + formatPercent(stats.terminalMismatchRate) + '</strong></div>' +
+          '<div>' + t(terminalLabelKey(stats.terminalRole)) + '<strong><br>' + formatPercent(stats.terminalMismatchRate) + '</strong></div>' +
           '</div><div class="section-note">' + t('hit_rate_label', { percent: hitPercent + '%' }) + '</div><div class="bar" aria-label="' + escapeHtml(t('hit_rate_aria', { percent: hitPercent + '%' })) + '"><span style="width:' + hitPercent + '%"></span></div>' +
           renderSequenceMap(group) +
           '<div class="plot-card"><h3>' + t('mismatch_distribution_title') + '</h3>' +
