@@ -457,6 +457,8 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             {m.selection.assay_type} /{" "}
             {m.selection.assay_id || "all matching assays"}
           </dd>
+          <dt>Database source</dt>
+          <dd>{m.database.filename || "Reference library"}</dd>
           <dt>Database SHA-256</dt>
           <dd className="mono">{m.database.sha256}</dd>
           <dt>Git commit</dt>

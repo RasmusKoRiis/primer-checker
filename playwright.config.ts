@@ -1,9 +1,10 @@
 import { defineConfig } from "@playwright/test";
+const port = Number(process.env.PLAYWRIGHT_PORT || 3001);
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 60_000,
   workers: 1,
-  use: { baseURL: "http://127.0.0.1:3001", trace: "retain-on-failure" },
+  use: { baseURL: `http://127.0.0.1:${port}`, trace: "retain-on-failure" },
   webServer: [
     {
       command:
@@ -13,8 +14,8 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "npm run start -- --port 3001",
-      url: "http://127.0.0.1:3001",
+      command: `npm run start -- --port ${port}`,
+      url: `http://127.0.0.1:${port}`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },

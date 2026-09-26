@@ -40,6 +40,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--teal);
 }
@@ -498,6 +499,7 @@ button svg {
   font-weight: 600;
 }
 .field select,
+.field input,
 .filters select,
 .filters input {
   height: 40px;
@@ -1385,5 +1387,149 @@ tbody tr:hover {
   }
   .dropzone {
     transition: none;
+  }
+}
+
+.database-card {
+  margin-bottom: 24px;
+  padding: 24px;
+}
+.database-modes,
+.database-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.database-modes .selected {
+  color: var(--teal);
+  border: 1px solid currentColor;
+  background: #edf7f3;
+}
+.database-hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 16px 0;
+}
+.database-fields {
+  display: grid;
+  grid-template-columns: 2fr 2fr 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+.primer-drafts {
+  display: grid;
+  gap: 14px;
+}
+.primer-draft {
+  background: #fafcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+.primer-draft-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.primer-sequence-fields {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 16px;
+}
+.primer-metadata-fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+.field textarea {
+  width: 100%;
+  min-height: 65px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+  font:
+    13px/1.6 var(--font-mono),
+    monospace;
+}
+.database-ready {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: #edf7f3;
+  border: 1px solid #c9ded4;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 13px;
+}
+.database-ready p {
+  margin: 5px 0 0;
+}
+.database-ready strong {
+  overflow-wrap: anywhere;
+}
+.batch-check {
+  margin-top: 24px;
+  padding: 20px 24px;
+  font-size: 13px;
+}
+.batch-check p {
+  margin: 8px 0 0;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.batch-check svg,
+.database-hint svg {
+  display: inline;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.batch-check .batch-ready {
+  color: #176744;
+}
+.batch-check .batch-error {
+  color: #9c3838;
+}
+.database-fields .field,
+.primer-draft .field {
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .database-card {
+    padding: 18px;
+  }
+  .database-fields,
+  .primer-metadata-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .primer-sequence-fields {
+    grid-template-columns: 1fr;
+  }
+  .database-ready {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .batch-check {
+    padding: 18px;
+  }
+}
+@media (max-width: 420px) {
+  .database-fields {
+    grid-template-columns: 1fr;
+  }
+  .database-modes {
+    gap: 6px;
+  }
+  .database-modes .button {
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }

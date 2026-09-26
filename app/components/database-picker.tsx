@@ -1,0 +1,447 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Database,
+  Download,
+  LoaderCircle,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import type { Catalog } from "../lib/results";
+import { download } from "../lib/results";
+import { makeDatabase, type PrimerDraft } from "../lib/database";
+
+const emptyPrimer = (key: number): PrimerDraft => ({
+  key,
+  name: "",
+  sequence: "",
+  role: "primer",
+  segment: "",
+  pool: "",
+  subtype: "",
+});
+
+export default function DatabasePicker({
+  bundled,
+  onChange,
+  disabled,
+}: {
+  bundled: Catalog | null;
+  onChange: (file: File | null, catalog: Catalog | null) => void;
+  disabled: boolean;
+}) {
+  const [mode, setMode] = useState("bundled");
+  const [name, setName] = useState("");
+  const [organism, setOrganism] = useState("SARS-CoV-2");
+  const [version, setVersion] = useState("1.0");
+  const [assayType, setAssayType] = useState("pcr");
+  const [primers, setPrimers] = useState<PrimerDraft[]>([emptyPrimer(0)]);
+  const [ready, setReady] = useState<{ file: File; catalog: Catalog } | null>(
+    null,
+  );
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const request = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      request.current++;
+      controller.current?.abort();
+    },
+    [],
+  );
+  const nextKey = useRef(1);
+  const input = useRef<HTMLInputElement>(null);
+  const limits = bundled?.limits;
+
+  function invalidate() {
+    request.current++;
+    controller.current?.abort();
+    setReady(null);
+    setError("");
+    setLoading(false);
+    onChange(null, null);
+  }
+  function changeMode(next: string) {
+    invalidate();
+    setMode(next);
+    if (next === "bundled") onChange(null, bundled);
+  }
+  function updatePrimer(key: number, field: keyof PrimerDraft, value: string) {
+    invalidate();
+    setPrimers((current) =>
+      current.map((p) => (p.key === key ? { ...p, [field]: value } : p)),
+    );
+  }
+  async function validate(file: File) {
+    invalidate();
+    if (
+      !/\.json$/i.test(file.name) ||
+      !file.size ||
+      file.size > (limits?.database_bytes || 250_000)
+    ) {
+      setError("Choose a nonempty JSON database of at most 250 kB.");
+      return;
+    }
+    const id = request.current;
+    const currentController = new AbortController();
+    controller.current = currentController;
+    setLoading(true);
+    try {
+      const body = new FormData();
+      body.append("database", file);
+      const response = await fetch("/api/database", {
+        method: "POST",
+        body,
+        signal: AbortSignal.any([
+          currentController.signal,
+          AbortSignal.timeout(30_000),
+        ]),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.assays)
+        throw new Error(
+          data?.error?.message ||
+            "Could not validate the database. Check the API connection and try again.",
+        );
+      if (id !== request.current) return;
+      setReady({ file, catalog: data });
+      onChange(file, data);
+    } catch (e) {
+      if (id === request.current)
+        setError(
+          e instanceof Error ? e.message : "Database validation failed.",
+        );
+    } finally {
+      if (id === request.current) setLoading(false);
+    }
+  }
+  function create() {
+    try {
+      const text = makeDatabase({
+        name,
+        organism,
+        version,
+        assayType,
+        primers,
+      });
+      void validate(
+        new File([text], "custom-primers.json", { type: "application/json" }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Check the primer fields.");
+    }
+  }
+  return (
+    <section className="card database-card" aria-labelledby="database-title">
+      <div className="card-heading">
+        <div className="section-icon">
+          <Database size={18} />
+        </div>
+        <div>
+          <h2 id="database-title">Primer database</h2>
+          <p>Use the reference library or bring your own primers</p>
+        </div>
+      </div>
+      <div className="database-modes" role="group" aria-label="Database source">
+        {[
+          ["bundled", "Reference database"],
+          ["upload", "Upload JSON"],
+          ["build", "Build a database"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={`button ${mode === value ? "selected" : "secondary"}`}
+            aria-pressed={mode === value}
+            disabled={disabled}
+            onClick={() => changeMode(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === "bundled" && (
+        <p className="database-hint">
+          Bundled PCR schemes and NGS panels. Version{" "}
+          {bundled?.database.version || "loading…"}.
+        </p>
+      )}
+      {mode === "upload" && (
+        <div className="database-upload">
+          <p className="database-hint">
+            Upload a self-contained JSON database: normalized schemes with
+            primer sequences, or a legacy organism → primer → sequence
+            dictionary. Up to 250 kB and {limits?.database_primers || 500}{" "}
+            primers. BED/FASTA asset references require the CLI.
+          </p>
+          <input
+            ref={input}
+            className="sr-only"
+            type="file"
+            accept=".json,application/json"
+            aria-label="Upload primer database"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void validate(file);
+            }}
+          />
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => input.current?.click()}
+          >
+            <Upload size={15} /> Choose database
+          </button>
+        </div>
+      )}
+      {mode === "build" && (
+        <div className="database-builder">
+          <p className="database-hint">
+            Enter primers in 5′ → 3′ orientation. DNA IUPAC ambiguity codes are
+            accepted. Create the database to use it in this analysis and
+            download a reusable JSON file.
+          </p>
+          <div className="database-fields">
+            <label className="field">
+              Database name
+              <input
+                value={name}
+                maxLength={200}
+                placeholder="My primer scheme"
+                onChange={(e) => {
+                  invalidate();
+                  setName(e.target.value);
+                }}
+              />
+            </label>
+            <label className="field">
+              Organism
+              <input
+                list="database-organisms"
+                value={organism}
+                maxLength={200}
+                onChange={(e) => {
+                  invalidate();
+                  setOrganism(e.target.value);
+                }}
+              />
+            </label>
+            <datalist id="database-organisms">
+              {[
+                "SARS-CoV-2",
+                "Influenza-A",
+                "Influenza-B",
+                "RSV-A",
+                "RSV-B",
+              ].map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
+            <label className="field">
+              Database version
+              <input
+                value={version}
+                maxLength={200}
+                onChange={(e) => {
+                  invalidate();
+                  setVersion(e.target.value);
+                }}
+              />
+            </label>
+            <label className="field">
+              Database assay type
+              <select
+                value={assayType}
+                onChange={(e) => {
+                  invalidate();
+                  setAssayType(e.target.value);
+                }}
+              >
+                <option value="pcr">PCR</option>
+                <option value="ngs">NGS</option>
+              </select>
+            </label>
+          </div>
+          <div className="primer-drafts">
+            {primers.map((primer, i) => (
+              <div className="primer-draft" key={primer.key}>
+                <div className="primer-draft-title">
+                  <strong>Primer {i + 1}</strong>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Remove primer ${i + 1}`}
+                    disabled={primers.length === 1}
+                    onClick={() => {
+                      invalidate();
+                      setPrimers(primers.filter((p) => p.key !== primer.key));
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <div className="primer-sequence-fields">
+                  <label className="field">
+                    Name
+                    <input
+                      aria-label={`Primer ${i + 1} name`}
+                      value={primer.name}
+                      maxLength={200}
+                      placeholder="Target_F"
+                      onChange={(e) =>
+                        updatePrimer(primer.key, "name", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Sequence · 5′ → 3′
+                    <textarea
+                      aria-label={`Primer ${i + 1} sequence`}
+                      value={primer.sequence}
+                      rows={2}
+                      maxLength={1000}
+                      spellCheck={false}
+                      placeholder="ACGT…"
+                      onChange={(e) =>
+                        updatePrimer(primer.key, "sequence", e.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="primer-metadata-fields">
+                  <label className="field">
+                    Role
+                    <select
+                      aria-label={`Primer ${i + 1} role`}
+                      value={primer.role}
+                      onChange={(e) =>
+                        updatePrimer(primer.key, "role", e.target.value)
+                      }
+                    >
+                      <option value="primer">Primer</option>
+                      <option value="forward">Forward primer</option>
+                      <option value="reverse">Reverse primer</option>
+                      <option value="probe">Probe</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    Segment
+                    <select
+                      aria-label={`Primer ${i + 1} segment`}
+                      value={primer.segment}
+                      onChange={(e) =>
+                        updatePrimer(primer.key, "segment", e.target.value)
+                      }
+                    >
+                      <option value="">None</option>
+                      {["HA", "M", "NS"].map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Pool (optional)
+                    <input
+                      aria-label={`Primer ${i + 1} pool`}
+                      value={primer.pool}
+                      maxLength={200}
+                      onChange={(e) =>
+                        updatePrimer(primer.key, "pool", e.target.value)
+                      }
+                    />
+                  </label>
+                  {organism === "Influenza-A" && (
+                    <label className="field">
+                      Subtype
+                      <select
+                        aria-label={`Primer ${i + 1} subtype`}
+                        value={primer.subtype}
+                        onChange={(e) =>
+                          updatePrimer(primer.key, "subtype", e.target.value)
+                        }
+                      >
+                        <option value="">Infer from name / untagged</option>
+                        <option>H1</option>
+                        <option>H3</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="database-hint">
+            Up to {limits?.database_primers || 500} primers,{" "}
+            {limits?.primer_length || 200} bases each. Influenza primers require
+            HA, M, or NS segments and matching segment labels in sequence
+            headers.
+          </p>
+          <div className="database-actions">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={primers.length >= (limits?.database_primers || 500)}
+              onClick={() => {
+                invalidate();
+                setPrimers([...primers, emptyPrimer(nextKey.current++)]);
+              }}
+            >
+              <Plus size={15} /> Add primer
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              disabled={loading}
+              onClick={create}
+            >
+              Create database
+            </button>
+          </div>
+        </div>
+      )}
+      {loading && (
+        <p className="database-hint" role="status">
+          <LoaderCircle size={15} className="spin" /> Validating database…
+        </p>
+      )}
+      {error && (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      )}
+      {ready && (
+        <div className="database-ready" role="status">
+          <div>
+            <strong>{ready.file.name} is ready for analysis</strong>
+            <p>
+              {ready.catalog.assays.reduce((n, a) => n + a.primers, 0)} primers
+              · version {ready.catalog.database.version}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={async () =>
+              download(
+                await ready.file.text(),
+                ready.file.name,
+                "application/json",
+              )
+            }
+          >
+            <Download size={15} /> Download database JSON
+          </button>
+        </div>
+      )}
+      {ready?.catalog.warnings?.map((warning, i) => (
+        <p className="database-hint" key={i}>
+          {warning}
+        </p>
+      ))}
+    </section>
+  );
+}

@@ -1,6 +1,12 @@
 export interface Catalog {
   application_version: string;
-  database: { version: string; sha256: string };
+  database: {
+    version: string;
+    sha256: string;
+    source?: string;
+    filename?: string;
+  };
+  warnings?: string[];
   viruses: { id: string; name: string; subtypes: string[] }[];
   assays: {
     id: string;
@@ -14,6 +20,11 @@ export interface Catalog {
     files: number;
     records: number;
     comparisons: number;
+    blast_calls?: number;
+    base_comparisons?: number;
+    database_bytes?: number;
+    database_primers?: number;
+    primer_length?: number;
   };
 }
 export interface ResultRow {
@@ -151,6 +162,7 @@ export function validateFiles(
   files: { name: string; size: number }[],
   metadata: { name: string; size: number } | null,
   limits: Catalog["limits"],
+  database: { name: string; size: number } | null = null,
 ): string | null {
   if (files.length > limits.files)
     return `Choose at most ${limits.files} FASTA files.`;
@@ -161,8 +173,10 @@ export function validateFiles(
   if (metadata && !/\.csv$/i.test(metadata.name))
     return "Metadata must be a CSV file.";
   if (
-    files.reduce((n, f) => n + f.size, metadata?.size || 0) >
-    limits.upload_bytes
+    files.reduce(
+      (n, f) => n + f.size,
+      (metadata?.size || 0) + (database?.size || 0),
+    ) > limits.upload_bytes
   )
     return "Combined uploads exceed 3 MB. Split the analysis into smaller batches.";
   if (new Set(files.map((f) => f.name)).size !== files.length)

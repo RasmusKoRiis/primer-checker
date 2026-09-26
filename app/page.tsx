@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownToLine,
@@ -20,15 +20,38 @@ import {
 import type { Analysis, Catalog } from "./lib/results";
 import { validateFiles } from "./lib/results";
 import Results from "./components/results";
+import DatabasePicker from "./components/database-picker";
 
 const fallbackLimits = {
   upload_bytes: 3_000_000,
   files: 10,
   records: 200,
   comparisons: 2000,
+  blast_calls: 300,
+  base_comparisons: 50_000_000,
 };
 export default function Home() {
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const customActive = useRef(false);
+  const [preflightAttempt, setPreflightAttempt] = useState(0);
+  const [bundled, setBundled] = useState<Catalog | null>(null);
+  const [customCatalog, setCustomCatalog] = useState<
+    Catalog | null | undefined
+  >(undefined);
+  const catalog = customCatalog === undefined ? bundled : customCatalog;
+  const [database, setDatabase] = useState<File | null>(null);
+  const [databaseReset, setDatabaseReset] = useState(0);
+  const [preflight, setPreflight] = useState<{
+    request: FormData;
+    error?: string;
+    workload?: {
+      records: number;
+      primers: number;
+      comparisons: number;
+      blast_calls: number;
+      base_comparisons: number;
+    };
+    warnings?: string[];
+  } | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [metadata, setMetadata] = useState<File | null>(null);
@@ -55,13 +78,14 @@ export default function Home() {
         return (await response.json()) as Catalog;
       })
       .then((data) => {
-        setCatalog(data);
+        setBundled(data);
         setCatalogError("");
-        setVirus((current) =>
-          data.viruses.some((v) => v.id === current)
-            ? current
-            : data.viruses[0]?.id || "",
-        );
+        if (!customActive.current)
+          setVirus((current) =>
+            data.viruses.some((v) => v.id === current)
+              ? current
+              : data.viruses[0]?.id || "",
+          );
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -87,11 +111,80 @@ export default function Home() {
         (assayType === "all" || a.type === assayType),
     ) || [];
   const limits = catalog?.limits || fallbackLimits;
-  const bytes = files.reduce((n, f) => n + f.size, metadata?.size || 0);
+  const bytes = files.reduce(
+    (n, f) => n + f.size,
+    (metadata?.size || 0) + (database?.size || 0),
+  );
+  const uploadProblem = validateFiles(files, metadata, limits, database);
+  const uploadData = useMemo(() => {
+    const data = new FormData();
+    files.forEach((file) => data.append("files", file));
+    if (metadata) data.append("metadata", metadata);
+    if (database) data.append("database", database);
+    data.append("virus", virus);
+    data.append("assay_type", assayType);
+    if (virus === "influenza") data.append("flu_type", subtype);
+    if (assay) data.append("assay_id", assay);
+    return data;
+  }, [files, metadata, database, virus, assayType, subtype, assay]);
+  const checked = preflight?.request === uploadData ? preflight : null;
+  const readyToAnalyze =
+    !!catalog && !!files.length && !uploadProblem && !!checked?.workload;
+  useEffect(() => {
+    if (!catalog || !files.length || uploadProblem) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/preflight", {
+          method: "POST",
+          body: uploadData,
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(30_000),
+          ]),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.workload)
+          throw new Error(
+            payload?.error?.message ||
+              "Could not check this batch. Try again or use fewer files.",
+          );
+        if (!controller.signal.aborted)
+          setPreflight({ request: uploadData, ...payload });
+      } catch (e) {
+        if (!controller.signal.aborted)
+          setPreflight({
+            request: uploadData,
+            error:
+              e instanceof Error ? e.message : "Could not check this batch.",
+          });
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [catalog, files.length, uploadData, uploadProblem, preflightAttempt]);
+
+  function changeDatabase(file: File | null, data: Catalog | null) {
+    customActive.current = !!file || data === null || data !== bundled;
+    setDatabase(file);
+    setCustomCatalog(!file && data === bundled ? undefined : data);
+    setPreflight(null);
+    setAssay("");
+    setError("");
+    if (data) {
+      const selected =
+        data.viruses.find((v) => v.id === virus) || data.viruses[0];
+      setVirus(selected?.id || "");
+      setSubtype(selected?.subtypes[0] || "A");
+      setAssayType(data.assays[0]?.type || "pcr");
+    }
+  }
 
   function addFiles(incoming: File[]) {
     const next = [...files, ...incoming];
-    const problem = validateFiles(next, metadata, limits);
+    const problem = validateFiles(next, metadata, limits, database);
     if (problem) {
       setError(problem);
       return;
@@ -108,6 +201,10 @@ export default function Home() {
           type: "text/plain",
         }),
       ]);
+      customActive.current = false;
+      setCustomCatalog(undefined);
+      setDatabase(null);
+      setDatabaseReset((n) => n + 1);
       setVirus("SARS-CoV-2");
       setAssayType("pcr");
       setAssay("");
@@ -119,24 +216,18 @@ export default function Home() {
   }
   async function analyze(event: React.FormEvent) {
     event.preventDefault();
-    const problem = validateFiles(files, metadata, limits);
+    const problem = validateFiles(files, metadata, limits, database);
     if (problem || !files.length) {
       setError(problem || "Choose at least one FASTA file.");
       return;
     }
+    if (!readyToAnalyze) return;
     setBusy(true);
     setError("");
-    const data = new FormData();
-    files.forEach((file) => data.append("files", file));
-    if (metadata) data.append("metadata", metadata);
-    data.append("virus", virus);
-    data.append("assay_type", assayType);
-    if (virus === "influenza") data.append("flu_type", subtype);
-    if (assay) data.append("assay_id", assay);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
-        body: data,
+        body: uploadData,
         signal: AbortSignal.timeout(285_000),
       });
       const payload = await response.json().catch(() => null);
@@ -219,9 +310,14 @@ export default function Home() {
           </div>
           <div className="db-stamp">
             <span>PRIMER DATABASE</span>
-            <strong>{catalog?.database.version || "Connecting…"}</strong>
+            <strong>
+              {catalog?.database.version ||
+                (customCatalog === null ? "Not selected" : "Connecting…")}
+            </strong>
             <small>
-              {catalog ? "PCR & NGS assays" : "Loading available assays"}
+              {catalog
+                ? database?.name || "Reference library"
+                : "Choose a valid database"}
             </small>
           </div>
         </div>
@@ -248,6 +344,12 @@ export default function Home() {
         )}
         <form onSubmit={analyze} aria-busy={busy}>
           <fieldset disabled={busy} className="form-reset">
+            <DatabasePicker
+              key={databaseReset}
+              bundled={bundled}
+              disabled={busy}
+              onChange={changeDatabase}
+            />
             <div className="input-grid">
               <section
                 className="card upload-card"
@@ -365,7 +467,12 @@ export default function Home() {
                       className="sr-only"
                       onChange={(e) => {
                         const next = e.target.files?.[0] || null;
-                        const problem = validateFiles(files, next, limits);
+                        const problem = validateFiles(
+                          files,
+                          next,
+                          limits,
+                          database,
+                        );
                         if (problem) setError(problem);
                         else {
                           setMetadata(next);
@@ -499,6 +606,68 @@ export default function Home() {
                 </div>
               </section>
             </div>
+            <section className="batch-check card" aria-label="Batch limits">
+              <div>
+                <strong>Check before analysis</strong>
+                <p>
+                  Maximum {(limits.upload_bytes / 1_000_000).toFixed(0)} MB
+                  total, including the database · {limits.files} files ·{" "}
+                  {limits.records} records ·{" "}
+                  {limits.comparisons.toLocaleString()} comparisons ·{" "}
+                  {limits.blast_calls || 300} BLAST searches ·{" "}
+                  {(
+                    (limits.base_comparisons || 50_000_000) / 1_000_000
+                  ).toFixed(0)}{" "}
+                  million bases × primers.
+                </p>
+              </div>
+              <div aria-live="polite">
+                {uploadProblem ? (
+                  <p className="batch-error">{uploadProblem}</p>
+                ) : !catalog ? (
+                  <p>
+                    Create or select a valid primer database to check your
+                    batch.
+                  </p>
+                ) : !files.length ? (
+                  <p>
+                    Add sequences to check the workload. Large batches can use
+                    the CLI.
+                  </p>
+                ) : checked?.error ? (
+                  <p className="batch-error">
+                    {checked.error}{" "}
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => {
+                        setPreflight(null);
+                        setPreflightAttempt((n) => n + 1);
+                      }}
+                    >
+                      Retry check
+                    </button>
+                  </p>
+                ) : checked?.workload ? (
+                  <p className="batch-ready">
+                    <Check size={16} /> Ready: {checked.workload.records}{" "}
+                    records · {checked.workload.primers} primers ·{" "}
+                    {checked.workload.comparisons.toLocaleString()} comparisons
+                    · {checked.workload.blast_calls} BLAST searches
+                  </p>
+                ) : (
+                  <p>
+                    <LoaderCircle size={15} className="spin" /> Checking files
+                    and selected primers…
+                  </p>
+                )}
+                {!!catalog &&
+                  !uploadProblem &&
+                  checked?.warnings?.map((warning, i) => (
+                    <p key={i}>{warning}</p>
+                  ))}
+              </div>
+            </section>
             <div className="run-bar">
               <div className="privacy-note">
                 <ShieldCheck size={18} />
@@ -519,7 +688,7 @@ export default function Home() {
                 <button
                   className="button primary"
                   type="submit"
-                  disabled={!catalog || !files.length || busy}
+                  disabled={!readyToAnalyze || busy}
                 >
                   {busy ? (
                     <>
