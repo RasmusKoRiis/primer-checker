@@ -625,15 +625,18 @@ function and pinned Linux x86_64 BLAST bundle. No database, permanent upload
 storage, or paid external service is required. The production branch must remain
 `main`; `feat/webapp-vercel` is for previews and review.
 
-The project is configured on the **Hobby** plan under `rasmus-projects1`.
-The [verified Vercel preview](https://primer-checker-hx0caunf0-rasmus-projects1.vercel.app)
-runs the Python API and BLAST, including PCR/NGS analysis, custom databases,
-report downloads, and workload rejection. It requires the owning Vercel account
-for access. Production is not assigned; an automatic first-deployment promotion
-was removed. Nothing is merged and no DNS records were changed.
+The [live application](https://primer-checker.vercel.app) is deployed on the
+**Hobby** plan under `rasmus-projects1` and can be used without a Vercel login.
+The tested feature branch was explicitly published for live testing; the draft
+PR is still open and no branches were merged. The existing fork,
+`RasmusKRiis/primer-checker`, is connected for Git deployments, with `main` as
+the production branch and other branches creating protected previews.
+PCR/NGS analysis, custom databases, report downloads, and workload rejection
+were verified on Vercel. The public browser flow also completes a real analysis.
+No custom domain or paid service was added.
 
 See [the deployment guide](docs/deployment.md) for verified results, direct
-preview updates, the remaining GitHub access/connection step, Hobby limits,
+preview and production updates, the GitHub connection, Hobby limits,
 BLAST checksums/libraries, fallback compute design, and future domain setup.
 
 The discovery baseline and design decisions are recorded in
