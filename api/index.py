@@ -92,9 +92,9 @@ def get_catalog():
 
 @app.get("/api/health")
 def health():
-    engine.resolve_blastn()
+    _, version = service.blast_version()
     service.load_database()
-    return {"status": "ok", "application_version": service.APP_VERSION}
+    return {"status": "ok", "application_version": service.APP_VERSION, "blast_version": version}
 
 
 @app.post("/api/analyze")

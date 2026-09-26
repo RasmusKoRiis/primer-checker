@@ -221,7 +221,7 @@ export default function Home() {
             <span>PRIMER DATABASE</span>
             <strong>{catalog?.database.version || "Connecting…"}</strong>
             <small>
-              {catalog ? "FHI · PCR & NGS assays" : "Loading available assays"}
+              {catalog ? "PCR & NGS assays" : "Loading available assays"}
             </small>
           </div>
         </div>
@@ -477,7 +477,10 @@ export default function Home() {
                     </option>
                     {assays.map((a) => (
                       <option key={`${a.type}-${a.id}`} value={a.id}>
-                        {a.name} ({a.primers} primers)
+                        {a.name}
+                        {virus === "influenza" && ["H1", "H3"].includes(subtype)
+                          ? ""
+                          : ` (${a.primers} primers)`}
                       </option>
                     ))}
                   </select>

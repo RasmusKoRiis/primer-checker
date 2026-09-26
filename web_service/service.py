@@ -187,6 +187,22 @@ def validate_metadata(data: bytes) -> str:
     return text
 
 
+def blast_version() -> tuple[str, str]:
+    executable = engine.resolve_blastn()
+    try:
+        version = subprocess.run(
+            [executable, "-version"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=engine.blast_environment(executable),
+        ).stdout.splitlines()[0]
+    except (OSError, subprocess.SubprocessError, IndexError):
+        raise engine.BlastUnavailableError("BLAST executable could not start.") from None
+    return executable, version
+
+
 def analyze(
     files: list[tuple[str, bytes]],
     metadata: tuple[str, bytes] | None,
@@ -273,18 +289,7 @@ def analyze(
                 "No sequence records match the selected primer segments. Influenza headers need segment tokens such as 01-HA|sample or 03-M|sample.",
                 "no_comparisons",
             )
-        executable = engine.resolve_blastn()
-        try:
-            blast_version = subprocess.run(
-                [executable, "-version"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-                env=engine.blast_environment(executable),
-            ).stdout.splitlines()[0]
-        except (OSError, subprocess.SubprocessError, IndexError):
-            raise engine.BlastUnavailableError("BLAST executable could not start.") from None
+        executable, version = blast_version()
         execution = engine.BlastExecution(executable, started + ANALYSIS_SECONDS, strict_errors=True, quiet=True)
         for path in prepared:
             rows.extend(
@@ -301,7 +306,7 @@ def analyze(
         "files": inputs,
         "metadata_sha256": hashlib.sha256(metadata[1]).hexdigest() if metadata else None,
         "blast": {
-            "version": blast_version,
+            "version": version,
             "reward": 2,
             "penalty": -3,
             "word_size": 4,
@@ -327,14 +332,23 @@ def analyze(
     }
     csv_stream = io.StringIO(newline="")
     # Protect web CSV downloads against spreadsheet formula injection without changing raw results/CLI.
+    provenance_columns = {
+        "Analysis_UTC": manifest["analysis_utc"],
+        "Application_Version": APP_VERSION,
+        "Database_Version": database["version"],
+        "Database_SHA256": database["sha256"],
+        "Git_Commit": manifest["git_commit"],
+        "Selection_JSON": json.dumps(manifest["selection"], sort_keys=True),
+        "BLAST_Config_JSON": json.dumps(manifest["blast"], sort_keys=True),
+    }
     csv_rows = [
         {
             k: ("'" + v if isinstance(v, str) and v.lstrip().startswith(("=", "+", "-", "@")) else v)
-            for k, v in row.items()
+            for k, v in {**row, **provenance_columns}.items()
         }
         for row in rows
     ]
-    engine.write_csv_rows(csv_rows, csv_stream)
+    engine.write_csv_rows(csv_rows, csv_stream, extra_fieldnames=tuple(provenance_columns))
     report_html = primer_report.build_html_report(rows)
     manifest_json = json.dumps(manifest, indent=2)
     provenance = (

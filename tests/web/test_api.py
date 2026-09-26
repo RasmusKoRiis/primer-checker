@@ -154,9 +154,12 @@ def test_real_blast_cli_web_equivalence(client, tmp_path, filename, virus, subty
     )
     assert response.status_code == 200, response.text
     result = response.json()
-    assert list(csv.DictReader(io.StringIO(result["downloads"]["csv"]))) == list(
+    web_rows = list(csv.DictReader(io.StringIO(result["downloads"]["csv"])))
+    assert [{k: r[k] for k in engine.CSV_FIELDNAMES} for r in web_rows] == list(
         csv.DictReader((tmp_path / "cli.csv").open())
     )
+    assert web_rows[0]["Database_SHA256"] == result["manifest"]["database"]["sha256"]
+    assert json.loads(web_rows[0]["BLAST_Config_JSON"])["word_size"] == 4
     assert result["summary"]["hits"] == 1
     assert result["manifest"]["blast"]["word_size"] == 4
     assert "Analysis provenance" in result["downloads"]["html"]

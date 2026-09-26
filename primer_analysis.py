@@ -1840,9 +1840,9 @@ def process_fasta_file(
             results.append(result_row)
     return results
 
-def write_csv_rows(results: list, stream):
+def write_csv_rows(results: list, stream, *, extra_fieldnames: tuple[str, ...] = ()):
     """Serialize the canonical CSV columns to a file or in-memory text stream."""
-    writer = csv.DictWriter(stream, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
+    writer = csv.DictWriter(stream, fieldnames=[*CSV_FIELDNAMES, *extra_fieldnames], extrasaction="ignore")
     writer.writeheader()
     writer.writerows(results)
 
