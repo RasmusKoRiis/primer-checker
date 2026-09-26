@@ -2,6 +2,7 @@
 import english from "../../report_text/english.json";
 import norwegian from "../../report_text/norwegian.json";
 import { useLanguage } from "./language";
+import { DatabaseFormatHelp, FastaFormatHelp } from "./input-format-help";
 
 type ReportKey = keyof typeof english;
 export default function Documentation() {
@@ -24,12 +25,25 @@ export default function Documentation() {
         className="documentation-contents"
         aria-label={t("Documentation sections")}
       >
+        <a href="#documentation-fasta">{t("FASTA headers")}</a>
+        <a href="#documentation-database">{t("Primer database format")}</a>
         <a href="#documentation-method">{report.doc_workflow_title}</a>
         <a href="#documentation-web">{t("Website results")}</a>
         <a href="#documentation-html">{t("Downloaded HTML report")}</a>
         <a href="#documentation-levels">{report.doc_risk_title}</a>
         <a href="#documentation-limits">{report.doc_limits_title}</a>
       </nav>
+      <section className="card documentation-section" id="documentation-fasta">
+        <h2>{t("FASTA headers")}</h2>
+        <FastaFormatHelp expanded />
+      </section>
+      <section
+        className="card documentation-section"
+        id="documentation-database"
+      >
+        <h2>{t("Primer database format")}</h2>
+        <DatabaseFormatHelp expanded />
+      </section>
       <section className="card documentation-section" id="documentation-method">
         <h2>{report.doc_workflow_title}</h2>
         <p>

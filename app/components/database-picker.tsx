@@ -1,5 +1,6 @@
 "use client";
 import { useLanguage } from "./language";
+import { DatabaseFormatHelp } from "./input-format-help";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -173,6 +174,7 @@ export default function DatabasePicker({
           </button>
         ))}
       </div>
+      <DatabaseFormatHelp />
       {mode === "bundled" && (
         <p className="database-hint">
           {t("Bundled PCR schemes and NGS panels. Version")}{" "}

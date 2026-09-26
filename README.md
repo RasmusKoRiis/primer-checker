@@ -474,6 +474,21 @@ Links such as `/#documentation-method` and `/#documentation-levels` open a
 specific section directly. Returning to Analysis preserves files, database
 editor contents, results, and filters.
 
+**FASTA header rules and examples** appears beside the sequence upload. It shows
+ordinary and influenza headers, explains that only the first word after `>` is
+the identifier, and includes downloadable synthetic FASTA templates. Influenza
+requires a pipe-separated segment tag such as `01-HA|sample_001` before any
+spaces; `sample_001 HA` and `sample_001|HA` do not identify the segment.
+
+**View primer database format and download templates** is available below the
+database source buttons. It previews complete editable JSON examples for PCR/NGS,
+influenza, and the legacy dictionary format, with a field guide and downloads.
+Replace the synthetic primers with your own before use; the PCR/NGS template
+defaults to `assay_type: "pcr"`, which can be changed to `"ngs"`. The same guides
+are in Documentation at `/#documentation-fasta` and `/#documentation-database`.
+Preview and download content share `app/lib/input-examples.json`, whose examples
+are checked against the real upload validator and preflight endpoint in tests.
+
 The **English / Norsk** buttons switch the analysis form, database builder,
 results, and documentation between English and Norwegian Bokmål. The preference
 is remembered in browser local storage; no sequence data is stored there.

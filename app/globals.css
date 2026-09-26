@@ -276,6 +276,7 @@ button svg {
 .upload-card,
 .settings-card {
   padding: 26px;
+  min-width: 0;
 }
 .card-heading {
   display: flex;
@@ -1727,5 +1728,115 @@ tbody tr:hover {
   #documentation,
   .documentation-section {
     scroll-margin-top: 140px;
+  }
+}
+
+.input-format-help {
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid #d6e7e1;
+  border-radius: 7px;
+  background: #f6faf8;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.input-format-help > p {
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.input-format-help summary {
+  color: var(--teal);
+  font-weight: 600;
+  cursor: pointer;
+}
+.input-format-help summary:hover {
+  text-decoration: underline;
+}
+.input-format-help details[open] > summary,
+.input-format-help[open] > summary {
+  margin-bottom: 14px;
+}
+.format-guide {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.format-guide p,
+.format-guide dd,
+.format-guide li {
+  color: var(--muted);
+}
+.format-guide code,
+.input-format-help > p code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.format-guide pre {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 14px 0;
+  max-height: 360px;
+  max-width: 100%;
+  overflow: auto;
+  background: #fff;
+  color: #264b48;
+  line-height: 1.65;
+  tab-size: 2;
+}
+.format-guide pre code {
+  overflow-wrap: normal;
+}
+.format-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+.format-options [aria-pressed="true"] {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-light);
+}
+.format-guide ul {
+  padding-left: 20px;
+  margin: 14px 0;
+}
+.format-guide li + li {
+  margin-top: 8px;
+}
+.format-callout {
+  border-left: 3px solid var(--teal);
+  padding: 10px 14px;
+  background: var(--teal-light);
+}
+.format-callout p {
+  margin-top: 8px;
+}
+.format-fields {
+  margin: 20px 0;
+}
+.format-fields dt {
+  margin-top: 14px;
+  font-weight: 600;
+}
+.format-fields dd {
+  margin: 4px 0 0;
+}
+.format-guide .format-footnote {
+  font-size: 12px;
+  margin: 10px 0 16px;
+}
+@media (max-width: 720px) {
+  .input-format-help {
+    padding: 12px;
+  }
+  .format-guide pre {
+    padding: 12px;
+  }
+  .format-guide .button {
+    white-space: normal;
+    text-align: left;
   }
 }

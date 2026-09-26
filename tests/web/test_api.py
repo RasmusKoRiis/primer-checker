@@ -40,6 +40,49 @@ def test_catalog_matches_real_database(client):
 
 
 @pytest.mark.parametrize(
+    "template,fasta,selection,records,comparisons",
+    [
+        ("normalized", "general", {"virus": "Example-virus"}, 2, 4),
+        ("legacy", "general", {"virus": "Example-virus"}, 2, 4),
+        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H1"}, 3, 2),
+        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H3"}, 3, 1),
+    ],
+)
+def test_downloadable_format_templates(client, template, fasta, selection, records, comparisons):
+    # The UI previews and downloads this same data, so examples exercise the real parser.
+    examples = json.loads((ROOT / "app/lib/input-examples.json").read_text())
+    database = json.dumps(examples["databases"][template]).encode()
+    assert client.post("/api/database", files={"database": ("template.json", database)}).status_code == 200
+    response = client.post(
+        "/api/preflight",
+        data={**selection, "assay_type": "pcr"},
+        files=[
+            ("database", ("template.json", database)),
+            ("files", ("template.fasta", examples["fasta"][fasta].encode())),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == []
+    assert response.json()["workload"]["records"] == records
+    assert response.json()["workload"]["comparisons"] == comparisons
+
+
+@pytest.mark.parametrize("header", ["sample_001 HA", "sample_001|HA"])
+def test_documented_incorrect_influenza_headers_do_not_match(client, header):
+    examples = json.loads((ROOT / "app/lib/input-examples.json").read_text())
+    response = client.post(
+        "/api/preflight",
+        data={"virus": "influenza", "flu_type": "H1", "assay_type": "pcr"},
+        files=[
+            ("database", ("template.json", json.dumps(examples["databases"]["influenza"]).encode())),
+            ("files", ("template.fasta", f">{header}\nACGTACGT\n".encode())),
+        ],
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "no_comparisons"
+
+
+@pytest.mark.parametrize(
     "content", [b"", b"ACGT", b">x\n", b">x\nACGTZ", b">\nACGT", b">x\nACGT\n>x\nACGT", b">x\nA-CG", b"\xff"]
 )
 def test_invalid_fasta(client, content):

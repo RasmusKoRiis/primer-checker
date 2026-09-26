@@ -1,6 +1,7 @@
 "use client";
 import { useLanguage, LanguageSwitch } from "./components/language";
 import Documentation from "./components/documentation";
+import { FastaFormatHelp } from "./components/input-format-help";
 
 import {
   useEffect,
@@ -501,6 +502,7 @@ export default function Home() {
                       <ArrowDownToLine size={15} />
                     </a>
                   </div>
+                  <FastaFormatHelp />
                   <div className="metadata-section">
                     <div>
                       <h3>

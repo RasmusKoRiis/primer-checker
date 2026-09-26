@@ -257,13 +257,11 @@ test("documentation and language switching preserve the analysis and database dr
   await expect(
     page.getByRole("button", { name: "Norsk", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await page
-    .getByLabel("Last opp FASTA-filer")
-    .setInputFiles({
-      name: "too-big.fa",
-      mimeType: "text/plain",
-      buffer: Buffer.alloc(3_000_001, "A"),
-    });
+  await page.getByLabel("Last opp FASTA-filer").setInputFiles({
+    name: "too-big.fa",
+    mimeType: "text/plain",
+    buffer: Buffer.alloc(3_000_001, "A"),
+  });
   await expect(
     page.getByRole("alert").filter({ hasText: "overskrider totalt 3 MB" }),
   ).toBeVisible();
@@ -298,6 +296,119 @@ test("Norwegian documentation opens directly and remains usable on mobile", asyn
   await expect(
     page.getByRole("button", { name: "Velg filer", exact: true }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("format guides download usable templates and explain influenza headers in both languages", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const sequenceCard = page.getByRole("region", {
+    name: "Sequence files",
+    exact: true,
+  });
+  const databaseCard = page.getByRole("region", {
+    name: "Primer database",
+    exact: true,
+  });
+  await expect(
+    sequenceCard.getByText(">sample_001", { exact: true }),
+  ).toBeVisible();
+  await sequenceCard
+    .getByText("FASTA header rules and examples", { exact: true })
+    .click();
+  await sequenceCard
+    .getByRole("button", { name: "Influenza FASTA", exact: true })
+    .click();
+  await expect(
+    sequenceCard.getByLabel("FASTA example", { exact: true }),
+  ).toContainText(">01-HA|sample_001");
+  const fastaEvent = page.waitForEvent("download");
+  await sequenceCard
+    .getByRole("button", { name: "Download FASTA template", exact: true })
+    .click();
+  const fastaDownload = await fastaEvent;
+  expect(fastaDownload.suggestedFilename()).toBe("influenza-template.fasta");
+
+  await databaseCard
+    .getByText("View primer database format and download templates", {
+      exact: true,
+    })
+    .click();
+  await databaseCard
+    .getByRole("button", { name: "Influenza template", exact: true })
+    .click();
+  const databaseEvent = page.waitForEvent("download");
+  await databaseCard
+    .getByRole("button", { name: "Download JSON template", exact: true })
+    .click();
+  const databaseDownload = await databaseEvent;
+  expect(databaseDownload.suggestedFilename()).toBe("influenza-primers.json");
+  const { readFile } = await import("node:fs/promises");
+  const database = await readFile((await databaseDownload.path())!, "utf8");
+  expect(JSON.parse(database).schemes[0].organism).toBe("Influenza-A");
+  await page.getByRole("button", { name: "Upload JSON", exact: true }).click();
+  await page
+    .getByLabel("Upload primer database", { exact: true })
+    .setInputFiles({
+      name: databaseDownload.suggestedFilename(),
+      mimeType: "application/json",
+      buffer: Buffer.from(database),
+    });
+  await expect(
+    page.getByText("influenza-primers.json is ready for analysis", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByLabel("Upload FASTA files").setInputFiles({
+    name: fastaDownload.suggestedFilename(),
+    mimeType: "text/plain",
+    buffer: await readFile((await fastaDownload.path())!),
+  });
+  await page
+    .getByRole("combobox", { name: "Influenza subtype", exact: true })
+    .selectOption("H1");
+  await expect(
+    page.getByRole("button", { name: "Analyze sequences", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByLabel("Batch limits")).toContainText(
+    "3 records · 2 primers · 2 comparisons",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(
+    page.getByText("Influensa trenger segmentmerking", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Last ned JSON-mal", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Dokumentasjon", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Format for primerdatabaser", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Format for primerdatabaser",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Enkelt oppslagsformat", exact: true })
+    .click();
+  await expect(
+    page
+      .locator("#documentation")
+      .getByLabel("JSON-eksempel på primerdatabase", { exact: true }),
+  ).toContainText('"Example-virus"');
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
