@@ -166,10 +166,14 @@ export default function Home() {
     };
   }, [catalog, files.length, uploadData, uploadProblem, preflightAttempt]);
 
-  function changeDatabase(file: File | null, data: Catalog | null) {
-    customActive.current = !!file || data === null || data !== bundled;
+  function changeDatabase(
+    file: File | null,
+    data: Catalog | null,
+    useReference = false,
+  ) {
+    customActive.current = !useReference;
     setDatabase(file);
-    setCustomCatalog(!file && data === bundled ? undefined : data);
+    setCustomCatalog(useReference ? undefined : data);
     setPreflight(null);
     setAssay("");
     setError("");

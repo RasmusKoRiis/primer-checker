@@ -29,7 +29,11 @@ export default function DatabasePicker({
   disabled,
 }: {
   bundled: Catalog | null;
-  onChange: (file: File | null, catalog: Catalog | null) => void;
+  onChange: (
+    file: File | null,
+    catalog: Catalog | null,
+    useReference?: boolean,
+  ) => void;
   disabled: boolean;
 }) {
   const [mode, setMode] = useState("bundled");
@@ -67,7 +71,7 @@ export default function DatabasePicker({
   function changeMode(next: string) {
     invalidate();
     setMode(next);
-    if (next === "bundled") onChange(null, bundled);
+    if (next === "bundled") onChange(null, bundled, true);
   }
   function updatePrimer(key: number, field: keyof PrimerDraft, value: string) {
     invalidate();
