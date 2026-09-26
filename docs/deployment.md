@@ -10,9 +10,9 @@ No paid service or plan upgrade was added.
 
 - [Project dashboard](https://vercel.com/rasmus-projects1/primer-checker)
 - [Public application](https://primer-checker.vercel.app)
-- [Production build details](https://vercel.com/rasmus-projects1/primer-checker/8GJPgoqvyJHxh4NHPGfmbPsfJoE6)
+- [Initial production build details](https://vercel.com/rasmus-projects1/primer-checker/8GJPgoqvyJHxh4NHPGfmbPsfJoE6)
 - [Earlier verified preview](https://primer-checker-hx0caunf0-rasmus-projects1.vercel.app)
-- Production commit: `c508b4d1e6ef4efde7ca6219c7809644d9cfa90f`.
+- Initial production commit: `c508b4d1e6ef4efde7ca6219c7809644d9cfa90f`.
 
 The owner authorized publishing the tested application for live testing.
 The stable production address opens without a Vercel login. Standard Protection

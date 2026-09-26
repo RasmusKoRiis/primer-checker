@@ -5,7 +5,7 @@ import { LanguageProvider } from "./components/language";
 export const metadata: Metadata = {
   title: "Primer Checker · Sequence compatibility",
   description:
-    "Evaluate diagnostic and sequencing primer compatibility against viral consensus sequences.",
+    "Evaluate PCR and sequencing primer compatibility against viral consensus sequences.",
 };
 export default function RootLayout({
   children,

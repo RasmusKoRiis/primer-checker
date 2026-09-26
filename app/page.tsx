@@ -344,7 +344,7 @@ export default function Home() {
               <h1>{t(result ? "Analysis workspace" : "New analysis")}</h1>
               <p>
                 {t(
-                  "Evaluate diagnostic and sequencing primer compatibility against viral consensus sequences.",
+                  "Evaluate PCR and sequencing primer compatibility against viral consensus sequences.",
                 )}
               </p>
             </div>
