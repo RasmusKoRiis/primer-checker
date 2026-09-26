@@ -179,7 +179,7 @@ python3 primer_checker.py \
   --output primer_report.csv
 ```
 
-## Usage
+## CLI usage
 Run the script from the command line with the required parameters. For example:
 
 ```bash
@@ -419,3 +419,134 @@ This script is provided as-is without any warranty. You are free to modify and d
 ## Contact
 
 For questions or feedback, please open an issue or contact the maintainer.
+
+
+## Web application
+
+The browser application uses **Next.js, React, and TypeScript** for uploads,
+configuration, native result tables, and alignment inspection. A **FastAPI**
+endpoint calls the same functions in `primer_analysis.py` as the CLI. The CLI,
+metadata matching, IUPAC mismatch definitions, influenza selection, and existing
+standalone report generator remain supported.
+
+### Local development
+
+Use Python 3.12 and Node 22 (see `.python-version` and `.nvmrc`). Install native
+NCBI BLAST+ and check that `blastn -version` works first. The CLI itself still
+requires only Python 3.10+ and BLAST; the dependencies below are for web/testing.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+npm ci
+npm run dev
+```
+
+Open [localhost:3000](http://localhost:3000). The single command starts Next.js
+and FastAPI on port 8000; Ctrl-C stops both. Upload FASTA files or choose **Use a
+synthetic example**, select a virus and assay, optionally attach metadata, and
+analyze. All files in one request use the same virus/subtype/assay selection.
+For mixed-virus folder routing, use the existing batch CLI.
+
+The UI provides primer/sample tables, sorting, primer/sample/segment/assay/
+mismatch/status filters, individual alignment inspection, CSV and standalone
+HTML downloads, and a JSON provenance download. Tables aggregate the filtered
+comparisons; no-hit results are separate from measured mismatches. The new UI
+uses descriptive counts, while the existing standalone HTML retains its
+existing risk interpretation. No new scientific risk thresholds are introduced.
+
+Provenance records the analysis time, application/database versions, loaded
+primer-record fingerprint, selections, input file hashes, metadata hash, BLAST
+version and parameters, and Git revision where supplied. Web CSVs preserve the
+canonical analysis columns and append provenance columns; standalone CLI CSV
+columns are unchanged. Web CSV text cells that could execute spreadsheet
+formulas are prefixed with an apostrophe. Raw JSON/HTML analytical values remain
+unchanged.
+
+### API
+
+- `GET /api/catalog`: available viruses, influenza subtypes, assays, database
+  fingerprint/version, and upload limits, derived from the installed database.
+- `GET /api/health`: verifies the database and that the BLAST executable runs.
+- `POST /api/analyze`: multipart `files` (repeat for multiple FASTAs), optional
+  `metadata` CSV, `virus`, optional `flu_type`, `assay_type` (`pcr`, `ngs`, `all`;
+  web default `pcr`), and optional exact `assay_id`.
+
+```bash
+curl --fail-with-body http://localhost:8000/api/analyze \
+  -F 'files=@public/example.fasta' \
+  -F 'virus=SARS-CoV-2' \
+  -F 'assay_type=pcr'
+```
+
+The stateless JSON response contains `rows`, `summary`, `manifest`, `warnings`,
+and `downloads` (`csv`, `html`, `manifest` strings). The browser creates downloads
+locally; there is no persistent analysis ID or download store. Errors have the
+shape `{"error":{"code":"invalid_fasta","message":"..."}}`, with appropriate
+422, 413, 502, 503, or 504 status codes. Avoid saving real biological request
+payloads or responses in shared logs.
+
+### Limits and privacy
+
+Use public, synthetic, or anonymized consensus sequences. **Do not upload
+confidential, identifiable, or otherwise restricted data to this public
+deployment.** No suitability for confidential NIPH/surveillance data is claimed.
+Uploads use temporary storage and are removed after processing. Browser results
+are lost on reload unless downloaded.
+
+The first version supports up to 10 FASTAs, 3 MB combined upload data, 200
+sequence records, and 2,000 primer/record comparisons, with a 240-second
+analysis deadline and a separate response-size limit. It does not accept ZIP,
+FASTQ, gapped sequences, or duplicate identifiers within a FASTA. Metadata uses
+the existing column matching rules above. Large NGS/surveillance workloads may
+need fewer files/one panel at a time, or the CLI.
+
+### Verification
+
+```bash
+source .venv/bin/activate
+python -m pytest -q
+python -m ruff check api web_service tests/web scripts/package_blast.py
+npm test
+npm run lint
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+The real-BLAST equivalence tests are skipped if BLAST is unavailable; install
+BLAST for full validation. The end-to-end suite requires it, starts the Python
+API and production Next.js server, uploads the synthetic fixture, checks a
+mismatch, downloads reports, and verifies mobile layout. GitHub Actions uses
+Python 3.12, Node 22, and the packaged Linux BLAST binary. It also verifies
+BLAST execution inside Amazon Linux 2023.
+
+To inspect the production build manually, run the two processes separately:
+
+```bash
+# Terminal 1, with the virtual environment active
+python -m uvicorn api.index:app --host 127.0.0.1 --port 8000 --no-access-log
+# Terminal 2
+npm run build
+npm run start
+```
+
+## Deployment
+
+The repository root is prepared for a Vercel Next.js project with a Python ASGI
+function and pinned Linux x86_64 BLAST bundle. No database, permanent upload
+storage, or paid external service is required. The production branch must remain
+`main`; `feat/webapp-vercel` is for previews and review.
+
+See [the deployment guide](docs/deployment.md) for the exact GitHub/Vercel
+connection steps, account limitations, build commands, optional environment
+variables, current Vercel limits, BLAST checksums/libraries, remaining preview
+verification, fallback compute design, and future custom domain setup. The
+implementation environment has no Vercel login, so a hosted preview and project
+connection still require the account owner. No production or DNS changes have
+been made.
+
+The discovery baseline and design decisions are recorded in
+[the implementation note](docs/web-implementation.md).
