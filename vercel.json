@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "python3 scripts/package_blast.py && npm ci",
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "{bin/**,web_service/**,primer_analysis.py,primer_report.py,primer_db/**,report_text/**}",
+      "excludeFiles": "{.venv/**,node_modules/**,.next/**,.git/**,tests/**,fixtures/**,docs/**,app/**,public/**,scripts/**,SARS-CoV-2.zip,test}"
+    }
+  },
+  "rewrites": [{ "source": "/api/:path*", "destination": "/api/index" }]
+}

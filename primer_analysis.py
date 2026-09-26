@@ -102,6 +102,15 @@ def resolve_blastn() -> str:
     return resolved
 
 
+def blast_environment(executable: str) -> dict[str, str] | None:
+    """Resolve adjacent packaged libraries without changing process-wide state."""
+    libraries = Path(executable).resolve().parent / "lib"
+    if sys.platform != "linux" or not libraries.is_dir():
+        return None
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    return {**os.environ, "LD_LIBRARY_PATH": str(libraries) + (os.pathsep + existing if existing else "")}
+
+
 @dataclass(frozen=True)
 class PrimerRecord:
     """Internal primer representation used by legacy and future database formats."""
@@ -1617,6 +1626,7 @@ def run_blastn(
                 text=True,
                 check=False,
                 timeout=timeout,
+                env=blast_environment(executable),
             )
         except FileNotFoundError:
             if execution.strict_errors:

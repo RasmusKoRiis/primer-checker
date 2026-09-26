@@ -1,0 +1,46 @@
+name: Web application
+on:
+  push:
+    branches: [main, feat/webapp-vercel]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Package and smoke-test BLAST on Amazon Linux 2023
+        run: |
+          docker run --rm --platform linux/amd64 -v "$PWD:/work" -w /work amazonlinux:2023 \
+            /bin/sh -c 'dnf install -y python3 libgomp bzip2-libs && python3 scripts/package_blast.py'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: python -m ruff check api web_service tests/web scripts/package_blast.py
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blast-bundle-manifest
+          path: bin/manifest.json
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-traces
+          path: test-results/

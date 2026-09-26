@@ -44,38 +44,65 @@ def load_database():
         records, validation = engine.load_primer_records(str(path))
         # Include loaded primer sequences/metadata, including BED/FASTA assets, in the fingerprint.
         # source_file is installation-dependent, so exclude it from reproducibility fingerprints.
-        canonical = json.dumps([
-            {k: v for k, v in asdict(p).items() if k != "source_file"}
-            for group in records.values() for p in group
-        ], sort_keys=True)
+        canonical = json.dumps(
+            [{k: v for k, v in asdict(p).items() if k != "source_file"} for group in records.values() for p in group],
+            sort_keys=True,
+        )
         versions = sorted({p.database_version for group in records.values() for p in group if p.database_version})
-        return records, {
-            "version": ", ".join(versions) or "unversioned",
-            "sha256": hashlib.sha256(canonical.encode()).hexdigest(),
-        }, validation
+        return (
+            records,
+            {
+                "version": ", ".join(versions) or "unversioned",
+                "sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+            },
+            validation,
+        )
     except (SystemExit, Exception):  # noqa: BLE001 - never expose local database paths
-        raise WebError("The primer database could not be loaded. Contact the deployment maintainer.", "database_error", 503) from None
+        raise WebError(
+            "The primer database could not be loaded. Contact the deployment maintainer.", "database_error", 503
+        ) from None
 
 
 def catalog() -> dict:
     records, database, _ = load_database()
     viruses = []
     if "Influenza-A" in records or "Influenza-B" in records:
-        viruses.append({"id": "influenza", "name": "Influenza", "subtypes":
-                        (["A", "H1", "H3"] if "Influenza-A" in records else []) +
-                        (["B"] if "Influenza-B" in records else [])})
-    viruses.extend({"id": name, "name": name, "subtypes": []} for name in records if name not in {"Influenza-A", "Influenza-B"})
+        viruses.append(
+            {
+                "id": "influenza",
+                "name": "Influenza",
+                "subtypes": (["A", "H1", "H3"] if "Influenza-A" in records else [])
+                + (["B"] if "Influenza-B" in records else []),
+            }
+        )
+    viruses.extend(
+        {"id": name, "name": name, "subtypes": []} for name in records if name not in {"Influenza-A", "Influenza-B"}
+    )
     assays = {}
     for group in records.values():
         for p in group:
             key = (p.organism, p.scheme_id, p.assay_type)
             if key not in assays:
-                assays[key] = {"id": p.scheme_id, "name": p.assay_name or p.scheme_id or "Default primers",
-                               "organism": p.organism, "type": p.assay_type, "primers": 0}
+                assays[key] = {
+                    "id": p.scheme_id,
+                    "name": p.assay_name or p.scheme_id or "Default primers",
+                    "organism": p.organism,
+                    "type": p.assay_type,
+                    "primers": 0,
+                }
             assays[key]["primers"] += 1
-    return {"application_version": APP_VERSION, "database": database, "viruses": viruses,
-            "assays": list(assays.values()), "limits": {"upload_bytes": MAX_UPLOAD_BYTES,
-            "files": MAX_FILES, "records": MAX_RECORDS, "comparisons": MAX_COMPARISONS}}
+    return {
+        "application_version": APP_VERSION,
+        "database": database,
+        "viruses": viruses,
+        "assays": list(assays.values()),
+        "limits": {
+            "upload_bytes": MAX_UPLOAD_BYTES,
+            "files": MAX_FILES,
+            "records": MAX_RECORDS,
+            "comparisons": MAX_COMPARISONS,
+        },
+    }
 
 
 def safe_filename(name: str, suffixes: set[str]) -> str:
@@ -112,7 +139,10 @@ def validate_fasta(data: bytes) -> str:
             current, length = header[0], 0
             # BLAST treats pipe-delimited IDs specially; reject reserved parser prefixes.
             if current.startswith(("gi|", "lcl|", "ref|", "gb|")):
-                raise WebError("Use plain FASTA identifiers rather than reserved BLAST ID prefixes (gi|, lcl|, ref|, gb|).", "invalid_fasta")
+                raise WebError(
+                    "Use plain FASTA identifiers rather than reserved BLAST ID prefixes (gi|, lcl|, ref|, gb|).",
+                    "invalid_fasta",
+                )
             if current in seen:
                 raise WebError("FASTA identifiers must be unique within each file.", "invalid_fasta")
             seen.add(current)
@@ -120,7 +150,10 @@ def validate_fasta(data: bytes) -> str:
                 raise WebError(f"Use at most {MAX_RECORDS} sequence records per analysis.", "work_limit", 413)
         else:
             if current is None or not set(line.upper()) <= engine.ALLOWED_SEQUENCE_CODES:
-                raise WebError("Invalid FASTA: use a >header followed by nucleotide sequences with IUPAC bases. FASTQ and gapped alignments are not accepted.", "invalid_fasta")
+                raise WebError(
+                    "Invalid FASTA: use a >header followed by nucleotide sequences with IUPAC bases. FASTQ and gapped alignments are not accepted.",
+                    "invalid_fasta",
+                )
             length += len(line)
     if not seen or not length:
         raise WebError("FASTA is empty or contains a header without a sequence.", "invalid_fasta")
@@ -147,13 +180,21 @@ def validate_metadata(data: bytes) -> str:
     return text
 
 
-def analyze(files: list[tuple[str, bytes]], metadata: tuple[str, bytes] | None,
-            virus: str, flu_type: str | None, assay_type: str, assay_id: str | None) -> dict:
+def analyze(
+    files: list[tuple[str, bytes]],
+    metadata: tuple[str, bytes] | None,
+    virus: str,
+    flu_type: str | None,
+    assay_type: str,
+    assay_id: str | None,
+) -> dict:
     started = time.monotonic()
     if not files or len(files) > MAX_FILES:
         raise WebError(f"Upload between 1 and {MAX_FILES} FASTA files.")
     if sum(len(data) for _, data in files) + (len(metadata[1]) if metadata else 0) > MAX_UPLOAD_BYTES:
-        raise WebError("Combined uploads exceed the 3 MB limit. Split the analysis into smaller batches.", "upload_too_large", 413)
+        raise WebError(
+            "Combined uploads exceed the 3 MB limit. Split the analysis into smaller batches.", "upload_too_large", 413
+        )
     records, database, validation = load_database()
     if assay_type not in {"pcr", "ngs", "all"}:
         raise WebError("Select PCR, NGS, or All assays.", "invalid_selection")
@@ -167,10 +208,14 @@ def analyze(files: list[tuple[str, bytes]], metadata: tuple[str, bytes] | None,
     except SystemExit:
         raise WebError("No primers match this virus, subtype, and assay selection.", "invalid_selection") from None
     if len(primers) * len(files) > MAX_BLAST_CALLS:
-        raise WebError("This selection includes too many BLAST searches. Select one assay or fewer files.", "work_limit", 413)
+        raise WebError(
+            "This selection includes too many BLAST searches. Select one assay or fewer files.", "work_limit", 413
+        )
     warnings = []
     if validation.warnings:
-        warnings.append("The primer database has validation warnings; the maintainer should review it with --validate-primers.")
+        warnings.append(
+            "The primer database has validation warnings; the maintainer should review it with --validate-primers."
+        )
     rows, inputs, total_records = [], [], 0
     with tempfile.TemporaryDirectory(prefix="primer-web-") as folder:
         root = Path(folder)
@@ -181,9 +226,13 @@ def analyze(files: list[tuple[str, bytes]], metadata: tuple[str, bytes] | None,
             metadata_path.write_text(validate_metadata(metadata[1]), encoding="utf-8")
             metadata_records, check = engine.load_metadata_csv(str(metadata_path))
             if check.errors:
-                raise WebError("Metadata could not be loaded. Check its sample ID, date, and Ct columns.", "invalid_metadata")
+                raise WebError(
+                    "Metadata could not be loaded. Check its sample ID, date, and Ct columns.", "invalid_metadata"
+                )
             if check.warnings:
-                warnings.append("Some metadata fields are missing or sample IDs are repeated. Ambiguous metadata is not attached.")
+                warnings.append(
+                    "Some metadata fields are missing or sample IDs are repeated. Ambiguous metadata is not attached."
+                )
         prepared, used_names = [], set()
         comparisons = 0
         for index, (name, data) in enumerate(files):
@@ -196,49 +245,103 @@ def analyze(files: list[tuple[str, bytes]], metadata: tuple[str, bytes] | None,
             path.write_text(validate_fasta(data), encoding="utf-8")
             subjects = engine.get_subject_ids(str(path))
             total_records += len(subjects)
-            comparisons += sum(len(engine.filter_subject_ids_for_primer(subjects, p, selected_virus, str(path), quiet=True)) for p in primers)
+            comparisons += sum(
+                len(engine.filter_subject_ids_for_primer(subjects, p, selected_virus, str(path), quiet=True))
+                for p in primers
+            )
             if total_records > MAX_RECORDS or comparisons > MAX_COMPARISONS:
-                raise WebError(f"Use at most {MAX_RECORDS} sequence records and {MAX_COMPARISONS} primer/record comparisons. Select fewer files or one assay.", "work_limit", 413)
+                raise WebError(
+                    f"Use at most {MAX_RECORDS} sequence records and {MAX_COMPARISONS} primer/record comparisons. Select fewer files or one assay.",
+                    "work_limit",
+                    413,
+                )
             if selected_virus.startswith("Influenza") and any(not engine.get_segment(s) for s in subjects):
-                warnings.append(f"{name}: some headers lack influenza segment tokens (for example 01-HA|sample). Segment-specific primers exclude those records.")
+                warnings.append(
+                    f"{name}: some headers lack influenza segment tokens (for example 01-HA|sample). Segment-specific primers exclude those records."
+                )
             prepared.append(path)
             inputs.append({"filename": name, "sha256": hashlib.sha256(data).hexdigest(), "records": len(subjects)})
         if not comparisons:
-            raise WebError("No sequence records match the selected primer segments. Influenza headers need segment tokens such as 01-HA|sample or 03-M|sample.", "no_comparisons")
+            raise WebError(
+                "No sequence records match the selected primer segments. Influenza headers need segment tokens such as 01-HA|sample or 03-M|sample.",
+                "no_comparisons",
+            )
         executable = engine.resolve_blastn()
         try:
-            blast_version = subprocess.run([executable, "-version"], check=True, capture_output=True, text=True, timeout=5).stdout.splitlines()[0]
+            blast_version = subprocess.run(
+                [executable, "-version"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=engine.blast_environment(executable),
+            ).stdout.splitlines()[0]
         except (OSError, subprocess.SubprocessError, IndexError):
             raise engine.BlastUnavailableError("BLAST executable could not start.") from None
         execution = engine.BlastExecution(executable, started + ANALYSIS_SECONDS, strict_errors=True, quiet=True)
         for path in prepared:
-            rows.extend(engine.process_fasta_file(str(path), selected_virus, primers, metadata_records, execution=execution))
+            rows.extend(
+                engine.process_fasta_file(str(path), selected_virus, primers, metadata_records, execution=execution)
+            )
 
     # The temporary directory and uploads are gone before serializing the response.
     manifest = {
-        "analysis_utc": datetime.now(timezone.utc).isoformat(), "application_version": APP_VERSION,
+        "analysis_utc": datetime.now(timezone.utc).isoformat(),
+        "application_version": APP_VERSION,
         "git_commit": os.environ.get("VERCEL_GIT_COMMIT_SHA", os.environ.get("APP_GIT_COMMIT", "unknown")),
-        "database": database, "selection": {"virus": virus, "flu_type": flu_type,
-        "assay_type": assay_type, "assay_id": assay_id}, "files": inputs,
+        "database": database,
+        "selection": {"virus": virus, "flu_type": flu_type, "assay_type": assay_type, "assay_id": assay_id},
+        "files": inputs,
         "metadata_sha256": hashlib.sha256(metadata[1]).hexdigest() if metadata else None,
-        "blast": {"version": blast_version, "reward": 2, "penalty": -3, "word_size": 4,
-                  "dust": "yes", "max_target_seqs": engine.BLAST_MAX_TARGET_SEQS},
+        "blast": {
+            "version": blast_version,
+            "reward": 2,
+            "penalty": -3,
+            "word_size": 4,
+            "dust": "yes",
+            "max_target_seqs": engine.BLAST_MAX_TARGET_SEQS,
+        },
     }
-    sample_key = lambda r: ("metadata", r["Metadata_Sample_ID"]) if r["Metadata_Sample_ID"] else (r["Fasta_File"], r["Subject_Sequence_ID"])
+    sample_key = lambda r: (
+        ("metadata", r["Metadata_Sample_ID"])
+        if r["Metadata_Sample_ID"]
+        else (r["Fasta_File"], r["Subject_Sequence_ID"])
+    )
     affected = [r for r in rows if r["Hit_Status"] == "hit" and r["Mismatches"] > 0]
-    summary = {"files": len(files), "sequence_records": total_records,
-               "samples": len({sample_key(r) for r in rows}), "primers": len(primers),
-               "comparisons": len(rows), "hits": sum(r["Hit_Status"] == "hit" for r in rows),
-               "mismatch_comparisons": len(affected), "samples_affected": len({sample_key(r) for r in affected})}
+    summary = {
+        "files": len(files),
+        "sequence_records": total_records,
+        "samples": len({sample_key(r) for r in rows}),
+        "primers": len(primers),
+        "comparisons": len(rows),
+        "hits": sum(r["Hit_Status"] == "hit" for r in rows),
+        "mismatch_comparisons": len(affected),
+        "samples_affected": len({sample_key(r) for r in affected}),
+    }
     csv_stream = io.StringIO(newline="")
     # Protect web CSV downloads against spreadsheet formula injection without changing raw results/CLI.
-    csv_rows = [{k: ("'" + v if isinstance(v, str) and v.lstrip().startswith(("=", "+", "-", "@")) else v)
-                 for k, v in row.items()} for row in rows]
+    csv_rows = [
+        {
+            k: ("'" + v if isinstance(v, str) and v.lstrip().startswith(("=", "+", "-", "@")) else v)
+            for k, v in row.items()
+        }
+        for row in rows
+    ]
     engine.write_csv_rows(csv_rows, csv_stream)
     html = primer_report.build_html_report(rows)
     manifest_json = json.dumps(manifest, indent=2)
     import html as html_module
-    provenance = '<details style="margin:24px"><summary>Analysis provenance</summary><pre>' + html_module.escape(manifest_json) + '</pre></details>'
+
+    provenance = (
+        '<details style="margin:24px"><summary>Analysis provenance</summary><pre>'
+        + html_module.escape(manifest_json)
+        + "</pre></details>"
+    )
     html = html.replace("</body>", provenance + "</body>")
-    return {"rows": rows, "summary": summary, "manifest": manifest, "warnings": list(dict.fromkeys(warnings)),
-            "downloads": {"csv": csv_stream.getvalue(), "html": html, "manifest": manifest_json}}
+    return {
+        "rows": rows,
+        "summary": summary,
+        "manifest": manifest,
+        "warnings": list(dict.fromkeys(warnings)),
+        "downloads": {"csv": csv_stream.getvalue(), "html": html, "manifest": manifest_json},
+    }

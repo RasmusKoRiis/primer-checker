@@ -1,0 +1,13 @@
+.venv
+node_modules
+.next
+.git
+.pytest_cache
+__pycache__
+**/__pycache__
+test-results
+playwright-report
+result
+SARS-CoV-2.zip
+test
+.env*

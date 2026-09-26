@@ -11,16 +11,26 @@ from starlette.exceptions import HTTPException
 import primer_analysis as engine
 from web_service import service
 
-app = FastAPI(title="Primer Checker API", version=service.APP_VERSION, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+app = FastAPI(
+    title="Primer Checker API",
+    version=service.APP_VERSION,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+    redoc_url=None,
+)
 
 
 def error(message: str, code: str, status: int):
-    return JSONResponse({"error": {"code": code, "message": message}}, status_code=status,
-                        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+    return JSONResponse(
+        {"error": {"code": code, "message": message}},
+        status_code=status,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 class BodyLimit:
     """Bound the actual body, including chunked uploads, before multipart parsing."""
+
     def __init__(self, app):
         self.app = app
 
@@ -35,7 +45,9 @@ class BodyLimit:
                     return
                 size += len(event.get("body", b""))
                 if size > service.MAX_REQUEST_BYTES:
-                    return await error("Upload too large. Combined files must be under 3 MB.", "upload_too_large", 413)(scope, receive, send)
+                    return await error("Upload too large. Combined files must be under 3 MB.", "upload_too_large", 413)(
+                        scope, receive, send
+                    )
                 chunks.append(event)
                 if not event.get("more_body", False):
                     break
@@ -63,7 +75,9 @@ async def blast_error(_request, exc):
         return error(str(exc), "analysis_timeout", 504)
     if isinstance(exc, engine.BlastUnavailableError):
         return error("BLAST is unavailable on this deployment. Contact the maintainer.", "blast_unavailable", 503)
-    return error("BLAST failed to analyze these files. Check the sequences or try a smaller batch.", "blast_failure", 502)
+    return error(
+        "BLAST failed to analyze these files. Check the sequences or try a smaller batch.", "blast_failure", 502
+    )
 
 
 @app.exception_handler(Exception)
@@ -88,7 +102,9 @@ async def analyze(request: Request):
     if not request.headers.get("content-type", "").startswith("multipart/form-data"):
         raise service.WebError("Send FASTA files as a multipart form upload.")
     try:
-        async with request.form(max_files=service.MAX_FILES + 1, max_fields=4, max_part_size=service.MAX_UPLOAD_BYTES) as form:
+        async with request.form(
+            max_files=service.MAX_FILES + 1, max_fields=4, max_part_size=service.MAX_UPLOAD_BYTES
+        ) as form:
             allowed = {"files", "metadata", "virus", "flu_type", "assay_type", "assay_id"}
             if set(form) - allowed:
                 raise service.WebError("The upload contains unsupported form fields.")
@@ -114,6 +130,15 @@ async def analyze(request: Request):
         raise service.WebError("Malformed upload or too many files/form fields.", "invalid_upload") from None
     encoded = json.dumps(result, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
     if len(encoded.encode()) > service.MAX_RESPONSE_BYTES:
-        raise service.WebError("The result exceeds the web response limit. Use fewer sequences or select one assay; larger batches can run through the CLI.", "result_too_large", 413)
+        raise service.WebError(
+            "The result exceeds the web response limit. Use fewer sequences or select one assay; larger batches can run through the CLI.",
+            "result_too_large",
+            413,
+        )
     from fastapi.responses import Response
-    return Response(encoded, media_type="application/json", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+    return Response(
+        encoded,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
