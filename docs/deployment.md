@@ -1,19 +1,56 @@
 # Deployment
 
-## Current verification and remaining account steps
+## Verified Hobby preview (2026-09-26)
 
-The feature branch is `feat/webapp-vercel`. The available GitHub account is
-`RasmusKRiis`, which has read-only access to `RasmusKoRiis/primer-checker`.
-The branch is therefore published to the fork `RasmusKRiis/primer-checker` for
-a pull request into the original repository's `main` branch. Nothing is merged.
+Vercel project **primer-checker** is linked to this workspace under
+**rasmus-projects1** (Rasmus' projects), using the existing **Hobby** plan.
+Project settings are Next.js, Node **22.x**, Fluid compute, and the default
+Hobby function resources. Python **3.12** comes from `.python-version`.
+No paid service or plan upgrade was added.
 
-Vercel CLI is logged out in the implementation environment. No Vercel project,
-preview deployment, production deployment, or DNS change has been made.
-The production Next.js build, local production routes, and the API are tested.
-GitHub Actions additionally packages and executes BLAST in Amazon Linux 2023
-and runs browser tests against the production build. A **real Vercel preview
-is still required** to confirm function collection, routing, bundle contents,
-and execution in Vercel itself; a Linux CI pass is not that verification.
+- [Project dashboard](https://vercel.com/rasmus-projects1/primer-checker)
+- [Verified preview](https://primer-checker-hx0caunf0-rasmus-projects1.vercel.app)
+- [Build details](https://vercel.com/rasmus-projects1/primer-checker/D52Z1yNrxzsgcTS2rrhebjk4HE7c)
+- Deployed application commit: `2889368fe3ff0612fd5b70a5fb8d170edef3227f`.
+
+The preview retains Vercel Authentication, so open it in a browser signed in
+to the owning Vercel account. `npx vercel curl` also supports authenticated
+checks without publishing the preview or exposing credentials.
+
+Verified on the actual hosted function:
+
+- `/api/health`: BLAST **2.15.0+** executes successfully; the build verified its
+  **33.5 MB** Linux bundle and four shared libraries.
+- `/api/catalog`: all seven bundled PCR/NGS schemes load with the expected
+  database fingerprint and upload/workload limits.
+- PCR on `public/example.fasta`: six comparisons, six hits, one mismatch
+  (`9:T>A`), with valid CSV, HTML, and provenance downloads.
+- VMIDT 2.2 NGS panel: 68 primers and 136 comparisons complete successfully.
+- Custom influenza JSON upload and H1 preflight: three records and two eligible
+  comparisons, confirming segment and subtype filtering.
+- A 201-record batch returns **413**; malformed FASTA returns **422**.
+- The frontend HTML is served successfully, with the current input guides and
+  without the removed metadata upload controls. Local browser tests cover the
+  interactive workflow; the in-app browser requires a separate Vercel sign-in
+  to interact with the protected hosted preview.
+
+Only the preview is assigned. There is no active production deployment or
+custom domain. Vercel classified the first deployment as production despite
+`--target=preview`; it briefly assigned the default `.vercel.app` domains. That
+specific deployment was removed after creating the correctly classified preview.
+The production URL now returns **404**. This first-deployment behavior is also
+tracked in [Vercel issue #17069](https://github.com/vercel/vercel/issues/17069).
+Always inspect the returned target; the CLI flag alone is insufficient for a
+brand-new project. No PR merge or DNS changes were made.
+
+Git-based automatic deployments are not connected yet. The Vercel-linked
+GitHub account lacks write/admin access to `RasmusKoRiis/primer-checker`, so
+Vercel rejected that connection. The feature branch `feat/webapp-vercel` is
+published to `RasmusKRiis/primer-checker`, with a draft PR into the original
+repository's `main`. Choose that fork for automatic previews, or give the
+Vercel-connected GitHub account write/admin access to the original repository
+and allow the Vercel GitHub App to access it. Once
+connected, keep the production branch set to **main**.
 
 ## One project, two runtimes
 
@@ -37,36 +74,48 @@ Its newer Services architecture is an alternative, but is unnecessary for this
 small application. See [Python functions in /api](https://vercel.com/docs/functions/runtimes/python/api-directory)
 and the [Python runtime](https://vercel.com/docs/functions/runtimes/python).
 
-## Connect GitHub and create a preview
+## Connect GitHub and update the preview
 
-1. Sign in to the intended Vercel account and grant its GitHub integration access
-   to `RasmusKoRiis/primer-checker`.
-2. Import the repository as project **primer-checker**, root **.**, framework
-   **Next.js**, Node **22.x**. Keep the committed install/build settings.
-3. Set the production branch to **main**. Enable Fluid compute and keep the
-   standard Hobby memory allocation. No project-specific secrets are required.
-4. Preview the feature branch or its pull request. For this fork-based PR,
-   the repository/Vercel owner must authorize the preview. Alternatively, an
-   account with upstream write access can fetch the feature branch and push it
-   under the same name to the original repository. Do not promote it to production.
-5. Confirm the deployment logs show the BLAST bundle verification. In the preview,
-   open `/api/health` and `/api/catalog`, upload `public/example.fasta`, run PCR,
-   inspect the single mismatch, and download CSV/HTML/provenance. Check an NGS
-   panel and a malformed upload too. Confirm no `node_modules` or `.next` directory
-   is included in the Python function bundle.
-6. Production is a separate review/merge decision: after approval, merge into
-   `main` and let that branch deploy. This task does not authorize the merge.
+The project already exists. Do not import a duplicate project or start a paid
+trial. To enable automatic deployments:
 
-CLI alternative after account connection:
+1. Grant the Vercel-connected GitHub account write/admin access to
+   `RasmusKoRiis/primer-checker` and allow the Vercel GitHub App to access it.
+   Alternatively, connect `RasmusKRiis/primer-checker` after choosing the fork.
+2. In the existing project's Git settings, connect the chosen repository and
+   verify **main** is the production branch. Keep the repository root and
+   committed Next.js build settings.
+3. Use `feat/webapp-vercel` for previews. A fork-based PR into the original
+   repository can require the repository/Vercel owner to authorize deployment.
+4. Verify `/api/health`, the catalog, an analysis, and downloads after updates.
+   Inspect the deployment target and assigned aliases before sharing its URL.
+5. Production remains a separate approval/merge decision. Do not promote the
+   development branch or merge the PR without approval.
+
+For direct updates from this already linked workspace:
+
+```bash
+npx vercel whoami
+npx vercel deploy --target=preview --scope rasmus-projects1 --yes
+# Inspect the returned URL; its target must be preview (null in the REST API).
+npx vercel inspect <preview-url> --scope rasmus-projects1
+npx vercel curl /api/health --deployment <preview-url> --scope rasmus-projects1
+```
+
+For a new checkout, sign in and link to the existing project:
 
 ```bash
 npx vercel login
-npx vercel link
-npx vercel pull --environment=preview
-npx vercel                 # preview only; do not add --prod
+npx vercel link --yes --scope rasmus-projects1 --project primer-checker
 ```
 
-Keep production set to `main`; verify it in project settings before deploying.
+Local `.vercel/` connection data and `.env.local` are ignored and must not be
+committed. Vercel may create a local OIDC token when linking; the application
+itself needs no API key. The Hobby plan is for
+[personal, non-commercial projects](https://vercel.com/docs/plans/hobby), with
+usage caps. Existing per-analysis limits do not enforce the account's monthly
+allowance. Review team usage before opening the service widely.
+
 Vercel Hobby checks commit authorship/account ownership, and fork pull requests
 require deployment authorization. See [Vercel Git integration](https://vercel.com/docs/git)
 and [GitHub integration](https://vercel.com/docs/git/vercel-for-github).

@@ -11,3 +11,9 @@ result
 SARS-CoV-2.zip
 test
 .env*
+.ruff_cache
+*.tsbuildinfo
+primer_report.csv
+primer_report.html
+batch_primer_report.csv
+batch_primer_report.html
