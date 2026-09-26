@@ -464,6 +464,29 @@ columns are unchanged. Web CSV text cells that could execute spreadsheet
 formulas are prefixed with an apostrophe. Raw JSON/HTML analytical values remain
 unchanged.
 
+### Documentation and language
+
+The **Documentation** tab opens the built-in analysis and report guide without
+leaving the application. It explains primer selection, BLAST matching, IUPAC
+compatibility, full-primer identity and mismatch calculations, no-hit results,
+website tables, and the downloaded HTML report's charts and review levels.
+Links such as `/#documentation-method` and `/#documentation-levels` open a
+specific section directly. Returning to Analysis preserves files, database
+editor contents, results, and filters.
+
+The **English / Norsk** buttons switch the analysis form, database builder,
+results, and documentation between English and Norwegian Bokmål. The preference
+is remembered in browser local storage; no sequence data is stored there.
+Language changes preserve the current analysis and only affect presentation.
+Uploaded names, sequence data, CSV column names, and calculations stay unchanged.
+The downloaded HTML report retains its own English/Norsk switch.
+
+Report guidance is imported directly from `report_text/english.json` and
+`report_text/norwegian.json`, so the website and generated report share that
+wording. Website-specific text is localized in `app/lib/norwegian.json`, using
+English phrases as keys and preserving `{placeholder}` names. Unrecognized
+technical API diagnostics fall back to their original wording.
+
 ### Your own primer database
 
 Choose **Upload JSON** to use a self-contained primer database for this analysis.

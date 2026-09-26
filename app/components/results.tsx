@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "./language";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
@@ -18,6 +19,7 @@ import {
 import type { Analysis, Filters, ResultRow } from "../lib/results";
 
 export default function Results({ analysis }: { analysis: Analysis }) {
+  const { t, locale } = useLanguage();
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [tab, setTab] = useState("primers");
   const [sort, setSort] = useState({ column: "primer", direction: 1 });
@@ -99,7 +101,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             })
           }
         >
-          {label}
+          {t(label)}
           <ArrowUpDown size={11} />
         </button>
       </th>
@@ -110,14 +112,15 @@ export default function Results({ analysis }: { analysis: Analysis }) {
       <div className="results-heading">
         <div>
           <div className="eyebrow">
-            <Check size={12} /> ANALYSIS COMPLETE
+            <Check size={12} />
+            {t("ANALYSIS COMPLETE")}
           </div>
-          <h2 id="results-title">Compatibility results</h2>
+          <h2 id="results-title">{t("Compatibility results")}</h2>
           <p>
             {m.selection.virus}
             {m.selection.flu_type ? ` · ${m.selection.flu_type}` : ""}{" "}
             <span>·</span> {m.selection.assay_type.toUpperCase()} <span>·</span>{" "}
-            {new Date(m.analysis_utc).toLocaleString()}
+            {new Date(m.analysis_utc).toLocaleString(locale)}
           </p>
         </div>
         <div className="download-group">
@@ -143,41 +146,46 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               )
             }
           >
-            <ArrowDownToLine size={14} /> HTML report
+            <ArrowDownToLine size={14} />
+            {t("HTML report")}
           </button>
         </div>
       </div>
       {analysis.warnings.map((w) => (
         <div className="warning-banner" key={w}>
-          {w}
+          {t(w)}
         </div>
       ))}
       <div className="stats-grid">
         <Stat
-          label="Files / sequence records"
+          label={t("Files / sequence records")}
           value={`${s.files} / ${s.sequence_records}`}
-          note={`${s.samples} analyzed sample identifiers`}
+          note={t("{count} analyzed sample identifiers", { count: s.samples })}
         />
         <Stat
-          label="Primers evaluated"
+          label={t("Primers evaluated")}
           value={s.primers}
-          note={`${s.comparisons.toLocaleString()} comparisons`}
+          note={t("{count} comparisons", {
+            count: s.comparisons.toLocaleString(locale),
+          })}
         />
         <Stat
-          label="Successful hits"
+          label={t("Successful hits")}
           value={s.hits}
-          note={`${s.comparisons - s.hits} without a hit`}
+          note={t("{count} without a hit", { count: s.comparisons - s.hits })}
         />
         <Stat
-          label="Hits with mismatches"
+          label={t("Hits with mismatches")}
           value={s.mismatch_comparisons}
-          note={`${s.samples_affected} sample identifiers affected`}
+          note={t("{count} sample identifiers affected", {
+            count: s.samples_affected,
+          })}
           accented
         />
       </div>
       <div className="results-card card">
         <div className="table-toolbar">
-          <div className="tabs" role="tablist" aria-label="Result views">
+          <div className="tabs" role="tablist" aria-label={t("Result views")}>
             <button
               role="tab"
               id="primers-tab"
@@ -185,7 +193,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               aria-selected={tab === "primers"}
               onClick={() => changeTab("primers")}
             >
-              By primer <span>{primers.length}</span>
+              {t("By primer")} <span>{primers.length}</span>
             </button>
             <button
               role="tab"
@@ -194,49 +202,50 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               aria-selected={tab === "samples"}
               onClick={() => changeTab("samples")}
             >
-              By sample <span>{filtered.length}</span>
+              {t("By sample")} <span>{filtered.length}</span>
             </button>
           </div>
           <span className="filter-label">
-            <SlidersHorizontal size={14} /> Filter results
+            <SlidersHorizontal size={14} />
+            {t("Filter results")}
           </span>
         </div>
         <div className="filters">
           <label>
-            Primer
+            {t("Primer")}
             <input
               value={filters.primer}
-              placeholder="Search primer…"
+              placeholder={t("Search primer…")}
               onChange={(e) => update("primer", e.target.value)}
             />
           </label>
           <label>
-            Sample
+            {t("Sample")}
             <input
               value={filters.sample}
-              placeholder="Search sample…"
+              placeholder={t("Search sample…")}
               onChange={(e) => update("sample", e.target.value)}
             />
           </label>
           <label>
-            Segment
+            {t("Segment")}
             <select
               value={filters.segment}
               onChange={(e) => update("segment", e.target.value)}
             >
-              <option value="">All segments</option>
+              <option value="">{t("All segments")}</option>
               {segments.map((x) => (
                 <option key={x}>{x}</option>
               ))}
             </select>
           </label>
           <label>
-            Assay
+            {t("Assay")}
             <select
               value={filters.assay}
               onChange={(e) => update("assay", e.target.value)}
             >
-              <option value="">All assays</option>
+              <option value="">{t("All assays")}</option>
               {assays.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -245,13 +254,13 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             </select>
           </label>
           <label>
-            Mismatches
+            {t("Mismatches")}
             <select
               value={filters.mismatches}
               onChange={(e) => update("mismatches", e.target.value)}
             >
-              <option value="">Any count</option>
-              <option value="any">At least one</option>
+              <option value="">{t("Any count")}</option>
+              <option value="any">{t("At least one")}</option>
               {mismatchCounts.map((x) => (
                 <option key={x} value={x}>
                   {x}
@@ -260,14 +269,14 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             </select>
           </label>
           <label>
-            Hit status
+            {t("Hit status")}
             <select
               value={filters.status}
               onChange={(e) => update("status", e.target.value)}
             >
-              <option value="">All results</option>
-              <option value="hit">Hit</option>
-              <option value="no_hit">No hit</option>
+              <option value="">{t("All results")}</option>
+              <option value="hit">{t("Hit")}</option>
+              <option value="no_hit">{t("No hit")}</option>
             </select>
           </label>
         </div>
@@ -279,8 +288,9 @@ export default function Results({ analysis }: { analysis: Analysis }) {
         >
           <table>
             <caption className="sr-only">
-              Primer compatibility results. Select a sample result to inspect
-              its alignment.
+              {t(
+                "Primer compatibility results. Select a sample result to inspect its alignment.",
+              )}
             </caption>
             <thead>
               <tr>
@@ -305,7 +315,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                       heading("Positions", "Mismatch_Positions"),
                       heading("Ct", "Ct_Value"),
                       heading("Date", "Sample_Date"),
-                      <th key="inspect">Alignment</th>,
+                      <th key="inspect">{t("Alignment")}</th>,
                     ]}
               </tr>
             </thead>
@@ -362,7 +372,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                         {r.Hit_Status === "hit" ? (
                           `${Number(r.Percent_Identity).toFixed(1)}%`
                         ) : (
-                          <span className="no-hit">No hit</span>
+                          <span className="no-hit">{t("No hit")}</span>
                         )}
                       </td>
                       <td>
@@ -384,7 +394,8 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                           className="table-link"
                           onClick={() => setSelected(r)}
                         >
-                          Inspect <ChevronRight size={13} />
+                          {t("Inspect")}
+                          <ChevronRight size={13} />
                         </button>
                       </td>
                     </tr>
@@ -393,7 +404,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
           </table>
           {!visible.length && (
             <div className="empty-table">
-              <h3>No results match these filters</h3>
+              <h3>{t("No results match these filters")}</h3>
               <button
                 className="text-button"
                 onClick={() => {
@@ -401,32 +412,35 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                   setPage(0);
                 }}
               >
-                Clear filters
+                {t("Clear filters")}
               </button>
             </div>
           )}
         </div>
         <div className="table-pagination">
           <span>
-            {ordered.length ? visiblePage * 25 + 1 : 0}–
-            {Math.min((visiblePage + 1) * 25, ordered.length)} of{" "}
-            {ordered.length} {tab === "primers" ? "primers" : "comparisons"}
+            {t("{start}–{end} of {count} {kind}", {
+              start: ordered.length ? visiblePage * 25 + 1 : 0,
+              end: Math.min((visiblePage + 1) * 25, ordered.length),
+              count: ordered.length,
+              kind: t(tab === "primers" ? "primers" : "comparisons"),
+            })}
           </span>
           <div>
             <button
               className="icon-button"
-              aria-label="Previous page"
+              aria-label={t("Previous page")}
               disabled={!visiblePage}
               onClick={() => setPage(visiblePage - 1)}
             >
               <ChevronLeft size={17} />
             </button>
             <span>
-              Page {visiblePage + 1} of {pages}
+              {t("Page {page} of {pages}", { page: visiblePage + 1, pages })}
             </span>
             <button
               className="icon-button"
-              aria-label="Next page"
+              aria-label={t("Next page")}
               disabled={visiblePage >= pages - 1}
               onClick={() => setPage(visiblePage + 1)}
             >
@@ -436,37 +450,43 @@ export default function Results({ analysis }: { analysis: Analysis }) {
         </div>
       </div>
       <p className="interpretation-note">
-        Tables summarize the filtered primer/sequence comparisons. “Affected”
-        means at least one mismatch; no-hit results are shown separately. These
-        are descriptive findings, not predictions of assay performance. Sample
-        identifiers use matched metadata when available; otherwise each FASTA
-        record is counted separately.
+        {t(
+          "Tables summarize the filtered primer/sequence comparisons. “Affected” means at least one mismatch; no-hit results are shown separately. These are descriptive findings, not predictions of assay performance. Sample identifiers use matched metadata when available; otherwise each FASTA record is counted separately.",
+        )}
       </p>
       <details className="provenance">
         <summary>
-          Analysis provenance{" "}
+          {t("Analysis provenance")}{" "}
           <span>
-            Database {m.database.version} · App {m.application_version} ·{" "}
-            {m.blast.version}
+            {t("Database {version} · App {app}", {
+              version: m.database.version,
+              app: m.application_version,
+            })}{" "}
+            · {m.blast.version}
           </span>
         </summary>
         <dl>
-          <dt>Selection</dt>
+          <dt>{t("Selection")}</dt>
           <dd>
             {m.selection.virus} / {m.selection.flu_type || "—"} /{" "}
             {m.selection.assay_type} /{" "}
-            {m.selection.assay_id || "all matching assays"}
+            {m.selection.assay_id || t("all matching assays")}
           </dd>
-          <dt>Database source</dt>
-          <dd>{m.database.filename || "Reference library"}</dd>
-          <dt>Database SHA-256</dt>
+          <dt>{t("Database source")}</dt>
+          <dd>{m.database.filename || t("Reference library")}</dd>
+          <dt>{t("Database SHA-256")}</dt>
           <dd className="mono">{m.database.sha256}</dd>
-          <dt>Git commit</dt>
+          <dt>{t("Git commit")}</dt>
           <dd className="mono">{m.git_commit}</dd>
-          <dt>Input files</dt>
+          <dt>{t("Input files")}</dt>
           <dd>
             {m.files
-              .map((f) => `${f.filename} (${f.records} records)`)
+              .map((f) =>
+                t("{filename} ({count} records)", {
+                  filename: f.filename,
+                  count: f.records,
+                }),
+              )
               .join(", ")}
           </dd>
         </dl>
@@ -480,7 +500,8 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             )
           }
         >
-          <ArrowDownToLine size={14} /> Download provenance
+          <ArrowDownToLine size={14} />
+          {t("Download provenance")}
         </button>
       </details>
       <dialog
@@ -496,13 +517,13 @@ export default function Results({ analysis }: { analysis: Analysis }) {
           <>
             <div className="dialog-heading">
               <div>
-                <div className="eyebrow">ALIGNMENT INSPECTOR</div>
+                <div className="eyebrow">{t("ALIGNMENT INSPECTOR")}</div>
                 <h2 id="alignment-title">{selected.Primer_Name}</h2>
                 <p>{selected.Subject_Sequence_ID}</p>
               </div>
               <button
                 className="icon-button"
-                aria-label="Close alignment"
+                aria-label={t("Close alignment")}
                 onClick={() => dialog.current?.close()}
               >
                 <X size={19} />
@@ -513,11 +534,20 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               <span>{selected.Assay_Name}</span>
               <span>
                 {selected.Hit_Status === "hit"
-                  ? `${Number(selected.Subject_End) >= Number(selected.Subject_Start) ? "Forward" : "Reverse"} strand · ${selected.Subject_Start}–${selected.Subject_End}`
-                  : "No BLAST hit"}
+                  ? t("{strand} strand · {start}–{end}", {
+                      strand: t(
+                        Number(selected.Subject_End) >=
+                          Number(selected.Subject_Start)
+                          ? "Forward"
+                          : "Reverse",
+                      ),
+                      start: selected.Subject_Start,
+                      end: selected.Subject_End,
+                    })
+                  : t("No BLAST hit")}
               </span>
             </div>
-            <p className="sequence-label">Original primer sequence</p>
+            <p className="sequence-label">{t("Original primer sequence")}</p>
             <div className="original-sequence mono">
               {selected.Primer_Sequence}
             </div>
@@ -525,20 +555,21 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               <>
                 <Alignment row={selected} />
                 <p className="alignment-legend">
-                  <span /> Highlighted bases are mismatches reported by the
-                  analysis engine. Positions are relative to the primer,
-                  starting at 1.
+                  <span />
+                  {t(
+                    "Highlighted bases are mismatches reported by the analysis engine. Positions are relative to the primer, starting at 1.",
+                  )}
                 </p>
                 <dl className="alignment-details">
-                  <dt>Mismatch positions</dt>
-                  <dd>{selected.Mismatch_Positions || "None"}</dd>
-                  <dt>Substitutions</dt>
+                  <dt>{t("Mismatch positions")}</dt>
+                  <dd>{selected.Mismatch_Positions || t("None")}</dd>
+                  <dt>{t("Substitutions")}</dt>
                   <dd className="mono">
-                    {selected.Mismatch_Details || "None"}
+                    {selected.Mismatch_Details || t("None")}
                   </dd>
-                  <dt>Identity</dt>
+                  <dt>{t("Identity")}</dt>
                   <dd>{Number(selected.Percent_Identity).toFixed(2)}%</dd>
-                  <dt>Ct / source</dt>
+                  <dt>{t("Ct / source")}</dt>
                   <dd>
                     {selected.Ct_Value || "—"}{" "}
                     {selected.Ct_Source && `(${selected.Ct_Source})`}
@@ -547,9 +578,9 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               </>
             ) : (
               <p className="warning-banner">
-                BLAST did not return a hit for this primer/sequence pair. There
-                is no alignment to inspect; this is separate from a measured
-                mismatch count.
+                {t(
+                  "BLAST did not return a hit for this primer/sequence pair. There is no alignment to inspect; this is separate from a measured mismatch count.",
+                )}
               </p>
             )}
           </>
@@ -578,6 +609,7 @@ function Stat({
   );
 }
 function Alignment({ row }: { row: ResultRow }) {
+  const { t } = useLanguage();
   const positions = new Set(row.Mismatch_Positions.split(",").map(Number));
   let position = 0;
   const columns = Array.from(row.Query_Alignment).map((base, index) => {
@@ -590,12 +622,15 @@ function Alignment({ row }: { row: ResultRow }) {
     };
   });
   return (
-    <div className="alignment-scroll" aria-label="Primer and subject alignment">
+    <div
+      className="alignment-scroll"
+      aria-label={t("Primer and subject alignment")}
+    >
       <div className="alignment-grid">
         <div className="alignment-labels">
-          <span>Position</span>
-          <span>Primer</span>
-          <span>Subject</span>
+          <span>{t("Position")}</span>
+          <span>{t("Primer")}</span>
+          <span>{t("Subject")}</span>
         </div>
         {columns.map((c, i) => (
           <div

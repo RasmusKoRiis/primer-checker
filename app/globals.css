@@ -1533,3 +1533,199 @@ tbody tr:hover {
     font-size: 12px;
   }
 }
+
+[hidden] {
+  display: none !important;
+}
+.site-controls {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+.topbar nav a[aria-current="page"] {
+  color: var(--teal);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 7px;
+}
+.language-switch {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  gap: 2px;
+  background: #f5f8f7;
+}
+.language-switch button {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.language-switch button[aria-pressed="true"] {
+  background: white;
+  color: var(--teal);
+  box-shadow: 0 1px 3px #173a3020;
+  font-weight: 600;
+}
+.documentation-view {
+  max-width: 980px;
+  margin: 0 auto;
+}
+.documentation-view .page-heading p {
+  max-width: 760px;
+  line-height: 1.8;
+}
+.documentation-contents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  border-block: 1px solid var(--line);
+  padding: 18px 0;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--teal);
+}
+.documentation-contents a:hover {
+  text-decoration: underline;
+}
+.documentation-section {
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  scroll-margin-top: 24px;
+}
+.documentation-section h2 {
+  font-size: 20px;
+  margin-bottom: 14px;
+}
+.documentation-section h3 {
+  margin: 24px 0 10px;
+  font-size: 15px;
+}
+.documentation-section p,
+.documentation-section li,
+.documentation-section dd {
+  font-size: 14px;
+  line-height: 1.85;
+  color: #4c606a;
+}
+.documentation-section p + p {
+  margin-top: 12px;
+}
+.documentation-section ul,
+.documentation-section ol {
+  padding-left: 23px;
+  margin: 14px 0;
+}
+.documentation-section li {
+  margin-bottom: 9px;
+  padding-left: 5px;
+}
+.documentation-formula {
+  border-left: 3px solid var(--teal);
+  background: var(--teal-light);
+  padding: 18px 22px;
+  margin: 22px 0;
+}
+.documentation-formula p {
+  margin: 8px 0 12px;
+}
+.documentation-formula code {
+  white-space: normal;
+  font-size: 13px;
+}
+.documentation-definitions dt {
+  font-weight: 600;
+  margin: 18px 0 5px;
+}
+.documentation-definitions dd {
+  margin: 0;
+}
+.documentation-note {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 20px;
+}
+.documentation-section details {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+.documentation-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+.documentation-section details p {
+  margin-top: 12px;
+}
+@media (max-width: 1000px) {
+  .site-controls {
+    gap: 18px;
+  }
+  .topbar nav {
+    gap: 16px;
+  }
+}
+@media (max-width: 720px) {
+  .topbar-inner {
+    height: auto;
+    min-height: 110px;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  .site-controls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .topbar nav {
+    font-size: 12px;
+  }
+  .topbar nav a:first-child {
+    display: flex;
+  }
+  .topbar nav .github-link {
+    display: none;
+  }
+  .language-switch button {
+    padding: 5px 8px;
+  }
+  .documentation-section {
+    padding: 20px 18px;
+  }
+  .documentation-section h2 {
+    font-size: 18px;
+  }
+  .documentation-section p,
+  .documentation-section li,
+  .documentation-section dd {
+    font-size: 13px;
+  }
+  .documentation-contents {
+    gap: 10px 18px;
+  }
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.skip-link {
+  z-index: 60;
+}
+#analysis,
+#documentation,
+.documentation-section {
+  scroll-margin-top: 100px;
+}
+@media (max-width: 720px) {
+  #analysis,
+  #documentation,
+  .documentation-section {
+    scroll-margin-top: 140px;
+  }
+}

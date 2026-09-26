@@ -1,6 +1,14 @@
 "use client";
+import { useLanguage, LanguageSwitch } from "./components/language";
+import Documentation from "./components/documentation";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import {
   ArrowDownToLine,
@@ -30,7 +38,21 @@ const fallbackLimits = {
   blast_calls: 300,
   base_comparisons: 50_000_000,
 };
+function subscribeView(callback: () => void) {
+  window.addEventListener("hashchange", callback);
+  return () => window.removeEventListener("hashchange", callback);
+}
 export default function Home() {
+  const { t, locale } = useLanguage();
+  const documentation = useSyncExternalStore(
+    subscribeView,
+    () => window.location.hash.startsWith("#documentation"),
+    () => false,
+  );
+  useEffect(() => {
+    if (documentation)
+      document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [documentation]);
   const customActive = useRef(false);
   const [preflightAttempt, setPreflightAttempt] = useState(0);
   const [bundled, setBundled] = useState<Catalog | null>(null);
@@ -250,8 +272,10 @@ export default function Home() {
         );
       setResult(payload);
       requestAnimationFrame(() => {
-        resultHeading.current?.scrollIntoView({ behavior: "smooth" });
-        resultHeading.current?.focus();
+        if (!resultHeading.current?.closest("[hidden]")) {
+          resultHeading.current?.scrollIntoView({ behavior: "smooth" });
+          resultHeading.current?.focus();
+        }
       });
     } catch (e) {
       setError(
@@ -268,505 +292,580 @@ export default function Home() {
   return (
     <>
       <a className="skip-link" href="#main">
-        Skip to analysis
+        {t("Skip to content")}
       </a>
       <header className="topbar">
         <div className="topbar-inner">
-          <Link className="brand" href="/" aria-label="Primer Checker home">
+          <Link
+            className="brand"
+            href="/"
+            aria-label={t("Primer Checker home")}
+          >
             <span className="brand-mark">
               <Dna size={22} />
             </span>
             <span>
               Primer Checker<span className="brand-divider">/</span>
-              <span className="brand-subtitle">Sequence compatibility</span>
+              <span className="brand-subtitle">
+                {t("Sequence compatibility")}
+              </span>
             </span>
           </Link>
-          <nav aria-label="Main navigation">
-            <a
-              href="https://github.com/RasmusKoRiis/primer-checker#web-application"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Documentation <ArrowRight size={13} />
-            </a>
-            <a
-              href="https://github.com/RasmusKoRiis/primer-checker"
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub <ArrowRight size={13} />
-            </a>
-          </nav>
+          <div className="site-controls">
+            <nav aria-label={t("Main navigation")}>
+              <a
+                href="#analysis"
+                aria-current={!documentation ? "page" : undefined}
+              >
+                {t("Analysis")}
+              </a>
+              <a
+                href="#documentation"
+                aria-current={documentation ? "page" : undefined}
+              >
+                {t("Documentation")}
+              </a>
+              <a
+                className="github-link"
+                href="https://github.com/RasmusKoRiis/primer-checker"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub <ArrowRight size={13} />
+              </a>
+            </nav>
+            <LanguageSwitch />
+          </div>
         </div>
       </header>
       <main id="main" className="workspace">
-        <div className="page-heading">
-          <div>
-            <div className="eyebrow">
-              <span className="status-dot" /> CONSENSUS SEQUENCE ANALYSIS
-            </div>
-            <h1>{result ? "Analysis workspace" : "New analysis"}</h1>
-            <p>
-              Evaluate diagnostic and sequencing primer compatibility
-              <br className="desktop-break" /> against viral consensus
-              sequences.
-            </p>
-          </div>
-          <div className="db-stamp">
-            <span>PRIMER DATABASE</span>
-            <strong>
-              {catalog?.database.version ||
-                (customCatalog === null ? "Not selected" : "Connecting…")}
-            </strong>
-            <small>
-              {catalog
-                ? database?.name || "Reference library"
-                : "Choose a valid database"}
-            </small>
-          </div>
-        </div>
-        <div className="workflow" aria-label="Analysis workflow">
-          <span className={files.length ? "complete" : "current"}>
-            <i>{files.length ? <Check size={12} /> : "1"}</i> Upload sequences
-          </span>
-          <ChevronRight size={14} />
-          <span className={files.length ? "current" : ""}>
-            <i>2</i> Configure analysis
-          </span>
-          <ChevronRight size={14} />
-          <span className={result ? "complete" : ""}>
-            <i>{result ? <Check size={12} /> : "3"}</i> Explore results
-          </span>
-        </div>
-        {catalogError && (
-          <div className="error-banner" role="alert">
-            {catalogError}{" "}
-            <button onClick={() => setConnectionAttempt((n) => n + 1)}>
-              Retry connection
-            </button>
-          </div>
-        )}
-        <form onSubmit={analyze} aria-busy={busy}>
-          <fieldset disabled={busy} className="form-reset">
-            <DatabasePicker
-              key={databaseReset}
-              bundled={bundled}
-              disabled={busy}
-              onChange={changeDatabase}
-            />
-            <div className="input-grid">
-              <section
-                className="card upload-card"
-                aria-labelledby="sequences-title"
-              >
-                <div className="card-heading">
-                  <div className="section-icon">
-                    <FileText size={18} />
-                  </div>
-                  <div>
-                    <h2 id="sequences-title">Sequence files</h2>
-                    <p>One or more consensus sequences in FASTA format</p>
-                  </div>
-                  <span className="label-tag">REQUIRED</span>
-                </div>
-                <input
-                  ref={input}
-                  id="fasta-upload"
-                  className="sr-only"
-                  type="file"
-                  accept=".fasta,.fa,.fas,.fna"
-                  multiple
-                  aria-label="Upload FASTA files"
-                  onChange={(e) => {
-                    addFiles(Array.from(e.target.files || []));
-                    e.target.value = "";
-                  }}
-                />
-                <div
-                  className={`dropzone ${dragging ? "dragging" : ""}`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (!busy) setDragging(true);
-                  }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragging(false);
-                    if (!busy) addFiles(Array.from(e.dataTransfer.files));
-                  }}
-                >
-                  <div className="upload-icon">
-                    <Upload size={25} strokeWidth={1.5} />
-                  </div>
-                  <h3>Drop your FASTA files here</h3>
-                  <p>or browse files from your computer</p>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={() => input.current?.click()}
-                  >
-                    <Plus size={15} /> Choose files
-                  </button>
-                  <small>
-                    .fasta, .fa, .fna, .fas <span>·</span> Up to {limits.files}{" "}
-                    files, 3 MB combined
-                  </small>
-                </div>
-                {files.length > 0 && (
-                  <ul className="file-list">
-                    {files.map((file, i) => (
-                      <li key={`${file.name}-${i}`}>
-                        <FileText size={16} />
-                        <span>{file.name}</span>
-                        <small>{(file.size / 1000).toFixed(1)} kB</small>
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label={`Remove ${file.name}`}
-                          onClick={() =>
-                            setFiles(files.filter((_, n) => n !== i))
-                          }
-                        >
-                          <X size={15} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+        <div id="analysis" hidden={documentation}>
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">
+                <span className="status-dot" />
+                {t("CONSENSUS SEQUENCE ANALYSIS")}
+              </div>
+              <h1>{t(result ? "Analysis workspace" : "New analysis")}</h1>
+              <p>
+                {t(
+                  "Evaluate diagnostic and sequencing primer compatibility against viral consensus sequences.",
                 )}
-                <div className="example-row">
-                  <span>Just exploring?</span>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={useExample}
-                  >
-                    Use a synthetic example <ArrowRight size={13} />
-                  </button>
-                  <a
-                    href="/example.fasta"
-                    download
-                    aria-label="Download synthetic FASTA example"
-                  >
-                    <ArrowDownToLine size={15} />
-                  </a>
-                </div>
-                <div className="metadata-section">
-                  <div>
-                    <h3>
-                      Sample metadata <span className="optional">Optional</span>
-                    </h3>
-                    <p>
-                      Attach a CSV with SampleID, Sample_Date, and Ct values.
-                    </p>
+              </p>
+            </div>
+            <div className="db-stamp">
+              <span>{t("PRIMER DATABASE")}</span>
+              <strong>
+                {catalog?.database.version ||
+                  t(customCatalog === null ? "Not selected" : "Connecting…")}
+              </strong>
+              <small>
+                {catalog
+                  ? database?.name || t("Reference library")
+                  : t("Choose a valid database")}
+              </small>
+            </div>
+          </div>
+          <div className="workflow" aria-label={t("Analysis workflow")}>
+            <span className={files.length ? "complete" : "current"}>
+              <i>{files.length ? <Check size={12} /> : "1"}</i>
+              {t("Upload sequences")}
+            </span>
+            <ChevronRight size={14} />
+            <span className={files.length ? "current" : ""}>
+              <i>2</i>
+              {t("Configure analysis")}
+            </span>
+            <ChevronRight size={14} />
+            <span className={result ? "complete" : ""}>
+              <i>{result ? <Check size={12} /> : "3"}</i>
+              {t("Explore results")}
+            </span>
+          </div>
+          {catalogError && (
+            <div className="error-banner" role="alert">
+              {t(catalogError)}{" "}
+              <button onClick={() => setConnectionAttempt((n) => n + 1)}>
+                {t("Retry connection")}
+              </button>
+            </div>
+          )}
+          <form onSubmit={analyze} aria-busy={busy}>
+            <fieldset disabled={busy} className="form-reset">
+              <DatabasePicker
+                key={databaseReset}
+                bundled={bundled}
+                disabled={busy}
+                onChange={changeDatabase}
+              />
+              <div className="input-grid">
+                <section
+                  className="card upload-card"
+                  aria-labelledby="sequences-title"
+                >
+                  <div className="card-heading">
+                    <div className="section-icon">
+                      <FileText size={18} />
+                    </div>
+                    <div>
+                      <h2 id="sequences-title">{t("Sequence files")}</h2>
+                      <p>
+                        {t("One or more consensus sequences in FASTA format")}
+                      </p>
+                    </div>
+                    <span className="label-tag">{t("REQUIRED")}</span>
                   </div>
-                  <label
-                    className="button secondary metadata-label"
-                    htmlFor="metadata-upload"
+                  <input
+                    ref={input}
+                    id="fasta-upload"
+                    className="sr-only"
+                    type="file"
+                    accept=".fasta,.fa,.fas,.fna"
+                    multiple
+                    aria-label={t("Upload FASTA files")}
+                    onChange={(e) => {
+                      addFiles(Array.from(e.target.files || []));
+                      e.target.value = "";
+                    }}
+                  />
+                  <div
+                    className={`dropzone ${dragging ? "dragging" : ""}`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (!busy) setDragging(true);
+                    }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragging(false);
+                      if (!busy) addFiles(Array.from(e.dataTransfer.files));
+                    }}
                   >
-                    <Plus size={14} /> Add CSV
-                    <input
-                      id="metadata-upload"
-                      type="file"
-                      accept=".csv"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const next = e.target.files?.[0] || null;
-                        const problem = validateFiles(
-                          files,
-                          next,
-                          limits,
-                          database,
-                        );
-                        if (problem) setError(problem);
-                        else {
-                          setMetadata(next);
-                          setError("");
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                {metadata && (
-                  <div className="metadata-file">
-                    <FileText size={15} />
-                    <span>{metadata.name}</span>
+                    <div className="upload-icon">
+                      <Upload size={25} strokeWidth={1.5} />
+                    </div>
+                    <h3>{t("Drop your FASTA files here")}</h3>
+                    <p>{t("or browse files from your computer")}</p>
                     <button
                       type="button"
-                      className="icon-button"
-                      aria-label="Remove metadata"
-                      onClick={() => setMetadata(null)}
+                      className="button secondary"
+                      onClick={() => input.current?.click()}
                     >
-                      <X size={14} />
+                      <Plus size={15} />
+                      {t("Choose files")}
                     </button>
+                    <small>
+                      {t(".fasta, .fa, .fna, .fas")}
+                      <span>·</span>
+                      {t("Up to {count} files, 3 MB combined", {
+                        count: limits.files,
+                      })}
+                    </small>
                   </div>
-                )}
-              </section>
-              <section
-                className="card settings-card"
-                aria-labelledby="settings-title"
-              >
-                <div className="card-heading">
-                  <div className="section-icon">
-                    <FlaskConical size={18} />
-                  </div>
-                  <div>
-                    <h2 id="settings-title">Analysis settings</h2>
-                    <p>Select the primers to evaluate</p>
-                  </div>
-                </div>
-                <label className="field">
-                  Virus
-                  <select
-                    value={virus}
-                    onChange={(e) => {
-                      setVirus(e.target.value);
-                      setAssay("");
-                      const options = catalog?.viruses.find(
-                        (v) => v.id === e.target.value,
-                      )?.subtypes;
-                      if (options?.length)
-                        setSubtype(options.includes("H3") ? "H3" : options[0]);
-                    }}
-                    disabled={!catalog || busy}
-                  >
-                    {catalog?.viruses.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedVirus?.subtypes.length ? (
-                  <label className="field">
-                    Influenza subtype
-                    <select
-                      value={subtype}
-                      onChange={(e) => {
-                        setSubtype(e.target.value);
-                        setAssay("");
-                      }}
-                    >
-                      {selectedVirus.subtypes.map((s) => (
-                        <option key={s}>{s}</option>
+                  {files.length > 0 && (
+                    <ul className="file-list">
+                      {files.map((file, i) => (
+                        <li key={`${file.name}-${i}`}>
+                          <FileText size={16} />
+                          <span>{file.name}</span>
+                          <small>{(file.size / 1000).toFixed(1)} kB</small>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={t("Remove {name}", { name: file.name })}
+                            onClick={() =>
+                              setFiles(files.filter((_, n) => n !== i))
+                            }
+                          >
+                            <X size={15} />
+                          </button>
+                        </li>
                       ))}
-                    </select>
-                  </label>
-                ) : null}
-                <div className="field">
-                  <span id="assay-type-label">Assay type</span>
-                  <div
-                    className="segmented"
-                    role="group"
-                    aria-labelledby="assay-type-label"
-                  >
-                    {["pcr", "ngs", "all"].map((type) => (
-                      <button
-                        type="button"
-                        key={type}
-                        aria-pressed={assayType === type}
-                        className={assayType === type ? "active" : ""}
-                        onClick={() => {
-                          setAssayType(type);
-                          setAssay("");
-                        }}
-                      >
-                        {type === "all" ? "All assays" : type.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <label className="field">
-                  Primer scheme / panel
-                  <select
-                    value={assay}
-                    onChange={(e) => setAssay(e.target.value)}
-                    disabled={!catalog || busy}
-                  >
-                    <option value="">
-                      All matching {assayType === "ngs" ? "panels" : "schemes"}
-                    </option>
-                    {assays.map((a) => (
-                      <option key={`${a.type}-${a.id}`} value={a.id}>
-                        {a.name}
-                        {virus === "influenza" && ["H1", "H3"].includes(subtype)
-                          ? ""
-                          : ` (${a.primers} primers)`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="settings-note">
-                  <Info size={15} />
-                  <p>
-                    {virus === "influenza"
-                      ? "Use segment labels in FASTA headers, such as 01-HA|sample. H1/H3 include the matching subtype and untagged influenza A primers."
-                      : "Sequences are compared with the selected primer database using BLASTn and IUPAC-aware mismatch matching."}
-                  </p>
-                </div>
-                <div className="settings-bottom">
-                  <span className="tiny-dot" /> Shared with the command-line
-                  analysis engine
-                </div>
-              </section>
-            </div>
-            <section className="batch-check card" aria-label="Batch limits">
-              <div>
-                <strong>Check before analysis</strong>
-                <p>
-                  Maximum {(limits.upload_bytes / 1_000_000).toFixed(0)} MB
-                  total, including the database · {limits.files} files ·{" "}
-                  {limits.records} records ·{" "}
-                  {limits.comparisons.toLocaleString()} comparisons ·{" "}
-                  {limits.blast_calls || 300} BLAST searches ·{" "}
-                  {(
-                    (limits.base_comparisons || 50_000_000) / 1_000_000
-                  ).toFixed(0)}{" "}
-                  million bases × primers.
-                </p>
-              </div>
-              <div aria-live="polite">
-                {uploadProblem ? (
-                  <p className="batch-error">{uploadProblem}</p>
-                ) : !catalog ? (
-                  <p>
-                    Create or select a valid primer database to check your
-                    batch.
-                  </p>
-                ) : !files.length ? (
-                  <p>
-                    Add sequences to check the workload. Large batches can use
-                    the CLI.
-                  </p>
-                ) : checked?.error ? (
-                  <p className="batch-error">
-                    {checked.error}{" "}
+                    </ul>
+                  )}
+                  <div className="example-row">
+                    <span>{t("Just exploring?")}</span>
                     <button
                       type="button"
                       className="text-button"
-                      onClick={() => {
-                        setPreflight(null);
-                        setPreflightAttempt((n) => n + 1);
-                      }}
+                      onClick={useExample}
                     >
-                      Retry check
+                      {t("Use a synthetic example")}
+                      <ArrowRight size={13} />
                     </button>
-                  </p>
-                ) : checked?.workload ? (
-                  <p className="batch-ready">
-                    <Check size={16} /> Ready: {checked.workload.records}{" "}
-                    records · {checked.workload.primers} primers ·{" "}
-                    {checked.workload.comparisons.toLocaleString()} comparisons
-                    · {checked.workload.blast_calls} BLAST searches
-                  </p>
-                ) : (
+                    <a
+                      href="/example.fasta"
+                      download
+                      aria-label={t("Download synthetic FASTA example")}
+                    >
+                      <ArrowDownToLine size={15} />
+                    </a>
+                  </div>
+                  <div className="metadata-section">
+                    <div>
+                      <h3>
+                        {t("Sample metadata")}{" "}
+                        <span className="optional">{t("Optional")}</span>
+                      </h3>
+                      <p>
+                        {t(
+                          "Attach a CSV with SampleID, Sample_Date, and Ct values.",
+                        )}
+                      </p>
+                    </div>
+                    <label
+                      className="button secondary metadata-label"
+                      htmlFor="metadata-upload"
+                    >
+                      <Plus size={14} />
+                      {t("Add CSV")}
+                      <input
+                        id="metadata-upload"
+                        type="file"
+                        accept=".csv"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const next = e.target.files?.[0] || null;
+                          const problem = validateFiles(
+                            files,
+                            next,
+                            limits,
+                            database,
+                          );
+                          if (problem) setError(problem);
+                          else {
+                            setMetadata(next);
+                            setError("");
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {metadata && (
+                    <div className="metadata-file">
+                      <FileText size={15} />
+                      <span>{metadata.name}</span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={t("Remove metadata")}
+                        onClick={() => setMetadata(null)}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                </section>
+                <section
+                  className="card settings-card"
+                  aria-labelledby="settings-title"
+                >
+                  <div className="card-heading">
+                    <div className="section-icon">
+                      <FlaskConical size={18} />
+                    </div>
+                    <div>
+                      <h2 id="settings-title">{t("Analysis settings")}</h2>
+                      <p>{t("Select the primers to evaluate")}</p>
+                    </div>
+                  </div>
+                  <label className="field">
+                    {t("Virus")}
+                    <select
+                      value={virus}
+                      onChange={(e) => {
+                        setVirus(e.target.value);
+                        setAssay("");
+                        const options = catalog?.viruses.find(
+                          (v) => v.id === e.target.value,
+                        )?.subtypes;
+                        if (options?.length)
+                          setSubtype(
+                            options.includes("H3") ? "H3" : options[0],
+                          );
+                      }}
+                      disabled={!catalog || busy}
+                    >
+                      {catalog?.viruses.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedVirus?.subtypes.length ? (
+                    <label className="field">
+                      {t("Influenza subtype")}
+                      <select
+                        value={subtype}
+                        onChange={(e) => {
+                          setSubtype(e.target.value);
+                          setAssay("");
+                        }}
+                      >
+                        {selectedVirus.subtypes.map((s) => (
+                          <option key={s}>{s}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <div className="field">
+                    <span id="assay-type-label">{t("Assay type")}</span>
+                    <div
+                      className="segmented"
+                      role="group"
+                      aria-labelledby="assay-type-label"
+                    >
+                      {["pcr", "ngs", "all"].map((type) => (
+                        <button
+                          type="button"
+                          key={type}
+                          aria-pressed={assayType === type}
+                          className={assayType === type ? "active" : ""}
+                          onClick={() => {
+                            setAssayType(type);
+                            setAssay("");
+                          }}
+                        >
+                          {type === "all"
+                            ? t("All assays")
+                            : type.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="field">
+                    {t("Primer scheme / panel")}
+                    <select
+                      value={assay}
+                      onChange={(e) => setAssay(e.target.value)}
+                      disabled={!catalog || busy}
+                    >
+                      <option value="">
+                        {t(
+                          assayType === "ngs"
+                            ? "All matching panels"
+                            : "All matching schemes",
+                        )}
+                      </option>
+                      {assays.map((a) => (
+                        <option key={`${a.type}-${a.id}`} value={a.id}>
+                          {a.name}
+                          {virus === "influenza" &&
+                          ["H1", "H3"].includes(subtype)
+                            ? ""
+                            : t(" ({count} primers)", { count: a.primers })}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="settings-note">
+                    <Info size={15} />
+                    <p>
+                      {t(
+                        virus === "influenza"
+                          ? "Use segment labels in FASTA headers, such as 01-HA|sample. H1/H3 include the matching subtype and untagged influenza A primers."
+                          : "Sequences are compared with the selected primer database using BLASTn and IUPAC-aware mismatch matching.",
+                      )}
+                    </p>
+                  </div>
+                  <div className="settings-bottom">
+                    <span className="tiny-dot" />
+                    {t("Shared with the command-line analysis engine")}
+                  </div>
+                </section>
+              </div>
+              <section
+                className="batch-check card"
+                aria-label={t("Batch limits")}
+              >
+                <div>
+                  <strong>{t("Check before analysis")}</strong>
                   <p>
-                    <LoaderCircle size={15} className="spin" /> Checking files
-                    and selected primers…
+                    {t(
+                      "Maximum {mb} MB total, including the database · {files} files · {records} records · {comparisons} comparisons · {searches} BLAST searches · {bases} million bases × primers.",
+                      {
+                        mb: (limits.upload_bytes / 1_000_000).toFixed(0),
+                        files: limits.files,
+                        records: limits.records,
+                        comparisons: limits.comparisons.toLocaleString(locale),
+                        searches: limits.blast_calls || 300,
+                        bases: (
+                          (limits.base_comparisons || 50_000_000) / 1_000_000
+                        ).toFixed(0),
+                      },
+                    )}
                   </p>
-                )}
-                {!!catalog &&
-                  !uploadProblem &&
-                  checked?.warnings?.map((warning, i) => (
-                    <p key={i}>{warning}</p>
-                  ))}
+                </div>
+                <div aria-live="polite">
+                  {uploadProblem ? (
+                    <p className="batch-error">{t(uploadProblem)}</p>
+                  ) : !catalog ? (
+                    <p>
+                      {t(
+                        "Create or select a valid primer database to check your batch.",
+                      )}
+                    </p>
+                  ) : !files.length ? (
+                    <p>
+                      {t(
+                        "Add sequences to check the workload. Large batches can use the CLI.",
+                      )}
+                    </p>
+                  ) : checked?.error ? (
+                    <p className="batch-error">
+                      {t(checked.error)}{" "}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => {
+                          setPreflight(null);
+                          setPreflightAttempt((n) => n + 1);
+                        }}
+                      >
+                        {t("Retry check")}
+                      </button>
+                    </p>
+                  ) : checked?.workload ? (
+                    <p className="batch-ready">
+                      <Check size={16} />
+                      {t(
+                        "Ready: {records} records · {primers} primers · {comparisons} comparisons · {searches} BLAST searches",
+                        {
+                          records: checked.workload.records,
+                          primers: checked.workload.primers,
+                          comparisons:
+                            checked.workload.comparisons.toLocaleString(locale),
+                          searches: checked.workload.blast_calls,
+                        },
+                      )}
+                    </p>
+                  ) : (
+                    <p>
+                      <LoaderCircle size={15} className="spin" />
+                      {t("Checking files and selected primers…")}
+                    </p>
+                  )}
+                  {!!catalog &&
+                    !uploadProblem &&
+                    checked?.warnings?.map((warning, i) => (
+                      <p key={i}>{t(warning)}</p>
+                    ))}
+                </div>
+              </section>
+              <div className="run-bar">
+                <div className="privacy-note">
+                  <ShieldCheck size={18} />
+                  <p>
+                    {t(
+                      "Do not upload confidential, identifiable, or otherwise restricted data to this public deployment.",
+                    )}
+                    <span>
+                      {t(
+                        "Uploads are processed temporarily and removed after analysis.",
+                      )}
+                    </span>
+                  </p>
+                </div>
+                <div className="run-action">
+                  <span>
+                    {files.length} {t(files.length === 1 ? "file" : "files")}{" "}
+                    {t("selected ·")} {(bytes / 1000).toFixed(0)} kB
+                  </span>
+                  <button
+                    className="button primary"
+                    type="submit"
+                    disabled={!readyToAnalyze || busy}
+                  >
+                    {busy ? (
+                      <>
+                        <LoaderCircle className="spin" size={17} />
+                        {t("Analyzing…")}
+                      </>
+                    ) : (
+                      <>
+                        {t("Analyze sequences")}
+                        <ArrowRight size={17} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </fieldset>
+            {error && (
+              <div className="error-banner" role="alert">
+                {t(error)}
+              </div>
+            )}
+            {busy && (
+              <div className="analysis-status" role="status">
+                <LoaderCircle className="spin" size={19} />
+                <div>
+                  <strong>{t("Analysis request in progress")}</strong>
+                  <p>
+                    {t(
+                      "The server validates your files, runs BLASTn, and builds the reports. Larger panels may take a few minutes.",
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+          </form>
+          {result ? (
+            <div ref={resultHeading} tabIndex={-1} className="results-anchor">
+              <Results key={result.manifest.analysis_utc} analysis={result} />
+            </div>
+          ) : (
+            <section
+              className="before-results"
+              aria-label={t("About the results")}
+            >
+              <div>
+                <span className="mini-number">01</span>
+                <h3>{t("Compare every primer")}</h3>
+                <p>
+                  {t(
+                    "Review matches and mismatch patterns across your selected sequences.",
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="mini-number">02</span>
+                <h3>{t("Inspect the alignment")}</h3>
+                <p>
+                  {t(
+                    "Explore individual bases, substitutions, and primer mismatch positions.",
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="mini-number">03</span>
+                <h3>{t("Keep a reproducible record")}</h3>
+                <p>
+                  {t(
+                    "Download CSV results, a standalone HTML report, and analysis provenance.",
+                  )}
+                </p>
               </div>
             </section>
-            <div className="run-bar">
-              <div className="privacy-note">
-                <ShieldCheck size={18} />
-                <p>
-                  Do not upload confidential, identifiable, or otherwise
-                  restricted data to this public deployment.
-                  <span>
-                    Uploads are processed temporarily and removed after
-                    analysis.
-                  </span>
-                </p>
-              </div>
-              <div className="run-action">
-                <span>
-                  {files.length} {files.length === 1 ? "file" : "files"}{" "}
-                  selected · {(bytes / 1000).toFixed(0)} kB
-                </span>
-                <button
-                  className="button primary"
-                  type="submit"
-                  disabled={!readyToAnalyze || busy}
-                >
-                  {busy ? (
-                    <>
-                      <LoaderCircle className="spin" size={17} /> Analyzing…
-                    </>
-                  ) : (
-                    <>
-                      Analyze sequences <ArrowRight size={17} />
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </fieldset>
-          {error && (
-            <div className="error-banner" role="alert">
-              {error}
-            </div>
           )}
-          {busy && (
-            <div className="analysis-status" role="status">
-              <LoaderCircle className="spin" size={19} />
-              <div>
-                <strong>Analysis request in progress</strong>
-                <p>
-                  The server validates your files, runs BLASTn, and builds the
-                  reports. Larger panels may take a few minutes.
-                </p>
-              </div>
-            </div>
-          )}
-        </form>
-        {result ? (
-          <div ref={resultHeading} tabIndex={-1} className="results-anchor">
-            <Results key={result.manifest.analysis_utc} analysis={result} />
-          </div>
-        ) : (
-          <section className="before-results" aria-label="About the results">
-            <div>
-              <span className="mini-number">01</span>
-              <h3>Compare every primer</h3>
-              <p>
-                Review matches and mismatch patterns across your selected
-                sequences.
-              </p>
-            </div>
-            <div>
-              <span className="mini-number">02</span>
-              <h3>Inspect the alignment</h3>
-              <p>
-                Explore individual bases, substitutions, and primer mismatch
-                positions.
-              </p>
-            </div>
-            <div>
-              <span className="mini-number">03</span>
-              <h3>Keep a reproducible record</h3>
-              <p>
-                Download CSV results, a standalone HTML report, and analysis
-                provenance.
-              </p>
-            </div>
-          </section>
-        )}
+        </div>
+        <div id="documentation" hidden={!documentation}>
+          <Documentation />
+        </div>
         <footer>
           <span>
             <Dna size={15} /> Primer Checker{" "}
             <span className="footer-version">
-              v{catalog?.application_version || "0.1.0"}
+              {t("v")}
+              {catalog?.application_version || "0.1.0"}
             </span>
           </span>
-          <span>Consensus sequences · PCR & NGS compatibility</span>
+          <span>{t("Consensus sequences · PCR & NGS compatibility")}</span>
           <a href="https://github.com/RasmusKoRiis/primer-checker/issues">
-            Report an issue <ArrowRight size={12} />
+            {t("Report an issue")}
+            <ArrowRight size={12} />
           </a>
         </footer>
       </main>

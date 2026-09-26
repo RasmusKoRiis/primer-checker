@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "./language";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -36,6 +37,7 @@ export default function DatabasePicker({
   ) => void;
   disabled: boolean;
 }) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState("bundled");
   const [name, setName] = useState("");
   const [organism, setOrganism] = useState("SARS-CoV-2");
@@ -145,11 +147,15 @@ export default function DatabasePicker({
           <Database size={18} />
         </div>
         <div>
-          <h2 id="database-title">Primer database</h2>
-          <p>Use the reference library or bring your own primers</p>
+          <h2 id="database-title">{t("Primer database")}</h2>
+          <p>{t("Use the reference library or bring your own primers")}</p>
         </div>
       </div>
-      <div className="database-modes" role="group" aria-label="Database source">
+      <div
+        className="database-modes"
+        role="group"
+        aria-label={t("Database source")}
+      >
         {[
           ["bundled", "Reference database"],
           ["upload", "Upload JSON"],
@@ -163,30 +169,30 @@ export default function DatabasePicker({
             disabled={disabled}
             onClick={() => changeMode(value)}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
       {mode === "bundled" && (
         <p className="database-hint">
-          Bundled PCR schemes and NGS panels. Version{" "}
-          {bundled?.database.version || "loading…"}.
+          {t("Bundled PCR schemes and NGS panels. Version")}{" "}
+          {bundled?.database.version || t("loading…")}.
         </p>
       )}
       {mode === "upload" && (
         <div className="database-upload">
           <p className="database-hint">
-            Upload a self-contained JSON database: normalized schemes with
-            primer sequences, or a legacy organism → primer → sequence
-            dictionary. Up to 250 kB and {limits?.database_primers || 500}{" "}
-            primers. BED/FASTA asset references require the CLI.
+            {t(
+              "Upload a self-contained JSON database: normalized schemes with primer sequences, or a legacy organism → primer → sequence dictionary. Up to 250 kB and {count} primers. BED/FASTA asset references require the CLI.",
+              { count: limits?.database_primers || 500 },
+            )}
           </p>
           <input
             ref={input}
             className="sr-only"
             type="file"
             accept=".json,application/json"
-            aria-label="Upload primer database"
+            aria-label={t("Upload primer database")}
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
@@ -198,24 +204,25 @@ export default function DatabasePicker({
             className="button secondary"
             onClick={() => input.current?.click()}
           >
-            <Upload size={15} /> Choose database
+            <Upload size={15} />
+            {t("Choose database")}
           </button>
         </div>
       )}
       {mode === "build" && (
         <div className="database-builder">
           <p className="database-hint">
-            Enter primers in 5′ → 3′ orientation. DNA IUPAC ambiguity codes are
-            accepted. Create the database to use it in this analysis and
-            download a reusable JSON file.
+            {t(
+              "Enter primers in 5′ → 3′ orientation. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.",
+            )}
           </p>
           <div className="database-fields">
             <label className="field">
-              Database name
+              {t("Database name")}
               <input
                 value={name}
                 maxLength={200}
-                placeholder="My primer scheme"
+                placeholder={t("My primer scheme")}
                 onChange={(e) => {
                   invalidate();
                   setName(e.target.value);
@@ -223,7 +230,7 @@ export default function DatabasePicker({
               />
             </label>
             <label className="field">
-              Organism
+              {t("Organism")}
               <input
                 list="database-organisms"
                 value={organism}
@@ -246,7 +253,7 @@ export default function DatabasePicker({
               ))}
             </datalist>
             <label className="field">
-              Database version
+              {t("Database version")}
               <input
                 value={version}
                 maxLength={200}
@@ -257,7 +264,7 @@ export default function DatabasePicker({
               />
             </label>
             <label className="field">
-              Database assay type
+              {t("Database assay type")}
               <select
                 value={assayType}
                 onChange={(e) => {
@@ -274,11 +281,13 @@ export default function DatabasePicker({
             {primers.map((primer, i) => (
               <div className="primer-draft" key={primer.key}>
                 <div className="primer-draft-title">
-                  <strong>Primer {i + 1}</strong>
+                  <strong>
+                    {t("Primer")} {i + 1}
+                  </strong>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`Remove primer ${i + 1}`}
+                    aria-label={t("Remove primer {number}", { number: i + 1 })}
                     disabled={primers.length === 1}
                     onClick={() => {
                       invalidate();
@@ -290,9 +299,9 @@ export default function DatabasePicker({
                 </div>
                 <div className="primer-sequence-fields">
                   <label className="field">
-                    Name
+                    {t("Name")}
                     <input
-                      aria-label={`Primer ${i + 1} name`}
+                      aria-label={t("Primer {number} name", { number: i + 1 })}
                       value={primer.name}
                       maxLength={200}
                       placeholder="Target_F"
@@ -302,9 +311,11 @@ export default function DatabasePicker({
                     />
                   </label>
                   <label className="field">
-                    Sequence · 5′ → 3′
+                    {t("Sequence · 5′ → 3′")}
                     <textarea
-                      aria-label={`Primer ${i + 1} sequence`}
+                      aria-label={t("Primer {number} sequence", {
+                        number: i + 1,
+                      })}
                       value={primer.sequence}
                       rows={2}
                       maxLength={1000}
@@ -318,39 +329,41 @@ export default function DatabasePicker({
                 </div>
                 <div className="primer-metadata-fields">
                   <label className="field">
-                    Role
+                    {t("Role")}
                     <select
-                      aria-label={`Primer ${i + 1} role`}
+                      aria-label={t("Primer {number} role", { number: i + 1 })}
                       value={primer.role}
                       onChange={(e) =>
                         updatePrimer(primer.key, "role", e.target.value)
                       }
                     >
-                      <option value="primer">Primer</option>
-                      <option value="forward">Forward primer</option>
-                      <option value="reverse">Reverse primer</option>
-                      <option value="probe">Probe</option>
+                      <option value="primer">{t("Primer")}</option>
+                      <option value="forward">{t("Forward primer")}</option>
+                      <option value="reverse">{t("Reverse primer")}</option>
+                      <option value="probe">{t("Probe")}</option>
                     </select>
                   </label>
                   <label className="field">
-                    Segment
+                    {t("Segment")}
                     <select
-                      aria-label={`Primer ${i + 1} segment`}
+                      aria-label={t("Primer {number} segment", {
+                        number: i + 1,
+                      })}
                       value={primer.segment}
                       onChange={(e) =>
                         updatePrimer(primer.key, "segment", e.target.value)
                       }
                     >
-                      <option value="">None</option>
+                      <option value="">{t("None")}</option>
                       {["HA", "M", "NS"].map((s) => (
                         <option key={s}>{s}</option>
                       ))}
                     </select>
                   </label>
                   <label className="field">
-                    Pool (optional)
+                    {t("Pool (optional)")}
                     <input
-                      aria-label={`Primer ${i + 1} pool`}
+                      aria-label={t("Primer {number} pool", { number: i + 1 })}
                       value={primer.pool}
                       maxLength={200}
                       onChange={(e) =>
@@ -360,17 +373,21 @@ export default function DatabasePicker({
                   </label>
                   {organism === "Influenza-A" && (
                     <label className="field">
-                      Subtype
+                      {t("Subtype")}
                       <select
-                        aria-label={`Primer ${i + 1} subtype`}
+                        aria-label={t("Primer {number} subtype", {
+                          number: i + 1,
+                        })}
                         value={primer.subtype}
                         onChange={(e) =>
                           updatePrimer(primer.key, "subtype", e.target.value)
                         }
                       >
-                        <option value="">Infer from name / untagged</option>
-                        <option>H1</option>
-                        <option>H3</option>
+                        <option value="">
+                          {t("Infer from name / untagged")}
+                        </option>
+                        <option>{t("H1")}</option>
+                        <option>{t("H3")}</option>
                       </select>
                     </label>
                   )}
@@ -379,10 +396,13 @@ export default function DatabasePicker({
             ))}
           </div>
           <p className="database-hint">
-            Up to {limits?.database_primers || 500} primers,{" "}
-            {limits?.primer_length || 200} bases each. Influenza primers require
-            HA, M, or NS segments and matching segment labels in sequence
-            headers.
+            {t(
+              "Up to {primers} primers, {bases} bases each. Influenza primers require HA, M, or NS segments and matching segment labels in sequence headers.",
+              {
+                primers: limits?.database_primers || 500,
+                bases: limits?.primer_length || 200,
+              },
+            )}
           </p>
           <div className="database-actions">
             <button
@@ -394,7 +414,8 @@ export default function DatabasePicker({
                 setPrimers([...primers, emptyPrimer(nextKey.current++)]);
               }}
             >
-              <Plus size={15} /> Add primer
+              <Plus size={15} />
+              {t("Add primer")}
             </button>
             <button
               type="button"
@@ -402,28 +423,35 @@ export default function DatabasePicker({
               disabled={loading}
               onClick={create}
             >
-              Create database
+              {t("Create database")}
             </button>
           </div>
         </div>
       )}
       {loading && (
         <p className="database-hint" role="status">
-          <LoaderCircle size={15} className="spin" /> Validating database…
+          <LoaderCircle size={15} className="spin" />
+          {t("Validating database…")}
         </p>
       )}
       {error && (
         <div className="error-banner" role="alert">
-          {error}
+          {t(error)}
         </div>
       )}
       {ready && (
         <div className="database-ready" role="status">
           <div>
-            <strong>{ready.file.name} is ready for analysis</strong>
+            <strong>
+              {t("{filename} is ready for analysis", {
+                filename: ready.file.name,
+              })}
+            </strong>
             <p>
-              {ready.catalog.assays.reduce((n, a) => n + a.primers, 0)} primers
-              · version {ready.catalog.database.version}
+              {t("{count} primers · version {version}", {
+                count: ready.catalog.assays.reduce((n, a) => n + a.primers, 0),
+                version: ready.catalog.database.version,
+              })}
             </p>
           </div>
           <button
@@ -437,13 +465,14 @@ export default function DatabasePicker({
               )
             }
           >
-            <Download size={15} /> Download database JSON
+            <Download size={15} />
+            {t("Download database JSON")}
           </button>
         </div>
       )}
       {ready?.catalog.warnings?.map((warning, i) => (
         <p className="database-hint" key={i}>
-          {warning}
+          {t(warning)}
         </p>
       ))}
     </section>

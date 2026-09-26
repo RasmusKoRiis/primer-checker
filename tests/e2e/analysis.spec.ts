@@ -32,6 +32,25 @@ test("upload, analyze with real BLAST, inspect mismatch, and download reports", 
   ).toBeVisible();
   await expect(page.locator(".alignment-column.mismatch")).toHaveCount(1);
   await page.getByRole("button", { name: "Close alignment" }).click();
+  await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Kompatibilitetsresultater",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Mismatch", exact: true }),
+  ).toHaveValue("any");
+  await page.getByRole("button", { name: "Undersøk", exact: true }).click();
+  await expect(
+    page.getByRole("dialog").getByText("9:T>A", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Lukk sekvenssammenstillingen", exact: true })
+    .click();
+  await page.getByRole("button", { name: "English", exact: true }).click();
+
   for (const [label, filename] of [
     ["CSV", "primer-results.csv"],
     ["HTML report", "primer-report.html"],
@@ -179,4 +198,109 @@ test("oversized uploads and excessive records cannot start analysis", async ({
     page.getByRole("button", { name: "Analyze sequences", exact: true }),
   ).toBeDisabled();
   expect(requests.some((url) => url.endsWith("/api/analyze"))).toBe(false);
+});
+
+test("documentation and language switching preserve the analysis and database draft", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Use a synthetic example", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Build a database", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Database name", exact: true })
+    .fill("My preserved assay");
+  await page.getByLabel("Primer 1 name", { exact: true }).fill("My_F");
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Help and documentation", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("20 primer bases, 2 mismatches → 90% identity", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Automatic review levels", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Automatic review levels", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Critical: no-hit rate is at least 20%/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "nb");
+  await expect(
+    page.getByRole("heading", { name: "Hjelp og dokumentasjon", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Kritisk: andelen uten treff er minst 20/),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Analyse", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Databasenavn", exact: true }),
+  ).toHaveValue("My preserved assay");
+  await expect(page.getByLabel("Primer 1 navn", { exact: true })).toHaveValue(
+    "My_F",
+  );
+  await expect(
+    page.getByRole("button", { name: "Fjern example.fasta", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Ny analyse", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Norsk", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByLabel("Last opp FASTA-filer")
+    .setInputFiles({
+      name: "too-big.fa",
+      mimeType: "text/plain",
+      buffer: Buffer.alloc(3_000_001, "A"),
+    });
+  await expect(
+    page.getByRole("alert").filter({ hasText: "overskrider totalt 3 MB" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(
+    page.getByRole("heading", { name: "New analysis", exact: true }),
+  ).toBeVisible();
+});
+
+test("Norwegian documentation opens directly and remains usable on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#documentation-method");
+  await expect(
+    page.getByRole("heading", {
+      name: "How the values are calculated",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Slik beregnes verdiene", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("link", { name: "Analyse", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Velg filer", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
