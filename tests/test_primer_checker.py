@@ -581,7 +581,7 @@ def test_batch_wrapper_dry_run_classifies_input_folder(tmp_path):
         (input_folder / filename).write_text(">sample\nACGT\n", encoding="utf-8")
 
     primer_db = tmp_path / "primers.json"
-    primer_db.write_text(json.dumps({"SARS-CoV-2": {"primer-a": "ACGT"}}), encoding="utf-8")
+    primer_db.write_text(json.dumps({"SARS-CoV-2": {"primer-a": "ACGT"}, "Influenza-A": {"H3_HA": "ACGT"}}), encoding="utf-8")
 
     result = subprocess.run(
         [

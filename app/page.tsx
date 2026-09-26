@@ -78,7 +78,7 @@ export default function Home() {
   const [catalogError, setCatalogError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [virus, setVirus] = useState("SARS-CoV-2");
-  const [subtype, setSubtype] = useState("H3");
+  const [subtype, setSubtype] = useState("");
   const [assayType, setAssayType] = useState("pcr");
   const [assay, setAssay] = useState("");
   const [error, setError] = useState("");
@@ -102,12 +102,16 @@ export default function Home() {
       .then((data) => {
         setBundled(data);
         setCatalogError("");
-        if (!customActive.current)
+        if (!customActive.current) {
           setVirus((current) =>
             data.viruses.some((v) => v.id === current)
               ? current
               : data.viruses[0]?.id || "",
           );
+          setSubtype(
+            data.viruses.find((v) => v.id === "influenza")?.subtypes[0] || "",
+          );
+        }
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -120,18 +124,22 @@ export default function Home() {
     return () => controller.abort();
   }, [connectionAttempt]);
   const selectedVirus = catalog?.viruses.find((v) => v.id === virus);
-  const organism =
-    virus === "influenza"
-      ? subtype === "B"
-        ? "Influenza-B"
-        : "Influenza-A"
-      : virus;
+  const fluSelection = selectedVirus?.selections?.[subtype];
+  const organism = fluSelection?.organism || virus;
   const assays =
-    catalog?.assays.filter(
-      (a) =>
-        a.organism === organism &&
-        (assayType === "all" || a.type === assayType),
-    ) || [];
+    catalog?.assays
+      .filter(
+        (a) =>
+          a.organism === organism &&
+          (assayType === "all" || a.type === assayType),
+      )
+      .map((a) => ({
+        ...a,
+        primers: fluSelection?.tag
+          ? a.untagged_primers + (a.subtype_counts[fluSelection.tag] || 0)
+          : a.primers,
+      }))
+      .filter((a) => a.primers > 0) || [];
   const limits = catalog?.limits || fallbackLimits;
   const bytes = files.reduce((n, f) => n + f.size, database?.size || 0);
   const uploadProblem = validateFiles(files, limits, database);
@@ -199,7 +207,7 @@ export default function Home() {
       const selected =
         data.viruses.find((v) => v.id === virus) || data.viruses[0];
       setVirus(selected?.id || "");
-      setSubtype(selected?.subtypes[0] || "A");
+      setSubtype(selected?.subtypes[0] || "");
       setAssayType(data.assays[0]?.type || "pcr");
     }
   }
@@ -521,10 +529,7 @@ export default function Home() {
                         const options = catalog?.viruses.find(
                           (v) => v.id === e.target.value,
                         )?.subtypes;
-                        if (options?.length)
-                          setSubtype(
-                            options.includes("H3") ? "H3" : options[0],
-                          );
+                        if (options?.length) setSubtype(options[0]);
                       }}
                       disabled={!catalog || busy}
                     >
@@ -593,10 +598,7 @@ export default function Home() {
                       {assays.map((a) => (
                         <option key={`${a.type}-${a.id}`} value={a.id}>
                           {a.name}
-                          {virus === "influenza" &&
-                          ["H1", "H3"].includes(subtype)
-                            ? ""
-                            : t(" ({count} primers)", { count: a.primers })}
+                          {t(" ({count} primers)", { count: a.primers })}
                         </option>
                       ))}
                     </select>
@@ -606,7 +608,7 @@ export default function Home() {
                     <p>
                       {t(
                         virus === "influenza"
-                          ? "Use segment labels in FASTA headers, such as 01-HA|sample. H1/H3 include the matching subtype and untagged influenza A primers."
+                          ? "Segments and subtype choices come from your database. Match segment labels in FASTA headers, for example 01-PB2|sample. A subtype includes primers with that exact tag plus untagged primers of the same influenza type."
                           : "Sequences are compared with the selected primer database using BLASTn and IUPAC-aware mismatch matching.",
                       )}
                     </p>

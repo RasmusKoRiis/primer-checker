@@ -44,8 +44,9 @@ def test_catalog_matches_real_database(client):
     [
         ("normalized", "general", {"virus": "Example-virus"}, 2, 4),
         ("legacy", "general", {"virus": "Example-virus"}, 2, 4),
-        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H1"}, 3, 2),
-        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H3"}, 3, 1),
+        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H1"}, 8, 2),
+        ("influenza", "influenza", {"virus": "influenza", "flu_type": "H5N1"}, 8, 3),
+        ("influenza", "influenza", {"virus": "influenza", "flu_type": "A"}, 8, 4),
     ],
 )
 def test_downloadable_format_templates(client, template, fasta, selection, records, comparisons):
@@ -499,3 +500,119 @@ def test_preflight_uses_shared_influenza_segment_filter(client, monkeypatch):
     assert response.json()["workload"]["records"] == 2
     assert response.json()["workload"]["comparisons"] == 1
     assert custom_request(client, "/api/preflight", database, virus="influenza", flu_type="H1").status_code == 422
+
+
+@pytest.mark.parametrize("assay_type", ["pcr", "ngs"])
+def test_custom_influenza_all_segments_subtypes_and_exact_workload(client, simulated_blast, assay_type):
+    database = custom_database(assay_type)
+    scheme = database["schemes"][0]
+    scheme["organism"] = "Influenza-A"
+    original = scheme["primers"][0]
+    segments = ["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS", "CUSTOM1"]
+    scheme["primers"] = [
+        dict(original, id=s, name=s, segment=s.lower(), subtype_tags=["h5n1", "H7N9"]) for s in segments
+    ] + [
+        dict(original, id="shared", name="H3_shared_PB2", segment="PB2", subtype_tags=[]),
+        dict(original, id="other", name="other", segment="NA", subtype_tags=["H9N2"]),
+    ]
+    catalog_response = client.post("/api/database", files={"database": ("flu.json", json.dumps(database))})
+    assert catalog_response.status_code == 200, catalog_response.text
+    catalog = catalog_response.json()
+    assert catalog["viruses"][0]["subtypes"] == ["A", "H5N1", "H7N9", "H9N2"]
+    assert catalog["assays"][0]["subtype_counts"] == {"H5N1": 9, "H7N9": 9, "H9N2": 1}
+    assert catalog["assays"][0]["untagged_primers"] == 1
+    fasta = "".join(f">{i:02}-{s}|sample\n{original['sequence']}\n" for i, s in enumerate(segments, 1)).encode()
+    selection = {"virus": "influenza", "flu_type": "H5N1", "assay_type": assay_type}
+    preflight = custom_request(client, "/api/preflight", database, fasta, **selection)
+    assert preflight.status_code == 200, preflight.text
+    assert preflight.json()["workload"]["comparisons"] == 10
+    result = custom_request(client, "/api/analyze", database, fasta, **selection)
+    assert result.status_code == 200, result.text
+    assert result.json()["summary"]["comparisons"] == 10
+    rows = result.json()["rows"]
+    assert all(row["Primer_Segment"] == row["Subject_Segment"] for row in rows)
+    assert {row["Primer_Name"] for row in rows} == set(segments) | {"H3_shared_PB2"}
+
+
+@pytest.mark.parametrize("tags", ["H5N1", None, [""], ["H5 N1"], ["H5/N1"], ["H" * 65]])
+def test_malformed_subtype_labels_fail_validation_in_cli_and_api(client, tags):
+    database = custom_database()
+    database["schemes"][0]["primers"][0]["subtype_tags"] = tags
+    assert engine.validate_normalized_primer_library(database).errors
+    result = client.post("/api/database", files={"database": ("flu.json", json.dumps(database))})
+    assert result.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "organism,segment,tag",
+    [
+        ("Influenza-B", "NA", "Victoria"),
+        ("Influenza-C", "HEF", "lineage1"),
+        ("Influenza-D", "P3", "custom1"),
+    ],
+)
+def test_catalog_and_preflight_support_database_defined_influenza_types(client, organism, segment, tag):
+    database = custom_database()
+    scheme = database["schemes"][0]
+    scheme["organism"] = organism
+    scheme["primers"][0].update(segment=segment, subtype_tags=[tag])
+    response = client.post("/api/database", files={"database": ("flu.json", json.dumps(database))})
+    assert response.status_code == 200, response.text
+    selection = organism.split("-")[1] + "/" + tag.upper()
+    assert response.json()["viruses"][0]["selections"][selection] == {"organism": organism, "tag": tag.upper()}
+    preflight = custom_request(
+        client,
+        "/api/preflight",
+        database,
+        f">01-{segment}|sample\nACGT\n".encode(),
+        virus="influenza",
+        flu_type=selection,
+    )
+    assert preflight.status_code == 200, preflight.text
+    assert preflight.json()["workload"]["comparisons"] == 1
+
+
+@pytest.mark.skipif(not shutil.which("blastn"), reason="BLAST+ integration requires blastn")
+def test_real_blast_h5n1_pb2_web_and_cli_agree(client, tmp_path):
+    database = custom_database()
+    scheme = database["schemes"][0]
+    scheme["organism"] = "Influenza-A"
+    scheme["primers"][0].update(segment="PB2", subtype_tags=["H5N1"])
+    fasta = b">01-PB2|sample\nACGTTGCAAGCTTAGCGATCGATGCTAGCA\n>06-NA|other\nACGTTGCAAGCTTAGCGATCGATGCTAGCA\n"
+    result = custom_request(client, "/api/analyze", database, fasta, virus="influenza", flu_type="H5N1")
+    assert result.status_code == 200, result.text
+    db_file, fasta_file, csv_file = [tmp_path / name for name in ["flu.json", "custom.fasta", "out.csv"]]
+    db_file.write_text(json.dumps(database))
+    fasta_file.write_bytes(fasta)
+    cli = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "primer_checker.py"),
+            "--primers",
+            str(db_file),
+            "--virus",
+            "influenza",
+            "--flu-type",
+            "H5N1",
+            "--assay-type",
+            "pcr",
+            "--fasta",
+            str(fasta_file),
+            "--output",
+            str(csv_file),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert cli.returncode == 0, cli.stderr
+    rows = list(csv.DictReader(csv_file.open()))
+    assert len(rows) == len(result.json()["rows"]) == 1
+    for field in [
+        "Primer_Name",
+        "Subject_Sequence_ID",
+        "Primer_Segment",
+        "Subject_Segment",
+        "Mismatches",
+        "Hit_Status",
+    ]:
+        assert rows[0][field] == str(result.json()["rows"][0][field])

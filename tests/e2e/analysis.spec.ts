@@ -1,6 +1,99 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
+test("influenza builder and analysis follow arbitrary database segments and subtype tags", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Build a database", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Database name", exact: true })
+    .fill("Extended influenza");
+  await page
+    .getByRole("combobox", { name: "Organism", exact: true })
+    .fill("Influenza-A");
+  const sequence = "ACGTTGCAAGCTTAGCGATCGATGCTAGCA";
+  for (const [i, name, segment, tags] of [
+    [1, "PB2_F", "PB2", "h5n1, H7N9"],
+    [2, "H3_shared", "NA", ""],
+    [3, "NA_H9", "NA", "H9N2"],
+  ] as const) {
+    if (i > 1)
+      await page
+        .getByRole("button", { name: "Add primer", exact: true })
+        .click();
+    await page.getByLabel(`Primer ${i} name`, { exact: true }).fill(name);
+    await page
+      .getByLabel(`Primer ${i} sequence`, { exact: true })
+      .fill(sequence);
+    await page.getByLabel(`Primer ${i} segment`, { exact: true }).fill(segment);
+    await page.getByLabel(`Primer ${i} subtype`, { exact: true }).fill(tags);
+  }
+  await page
+    .getByRole("button", { name: "Create database", exact: true })
+    .click();
+  await expect(
+    page.getByText("custom-primers.json is ready for analysis", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const subtype = page.getByRole("combobox", {
+    name: "Influenza subtype",
+    exact: true,
+  });
+  await expect(subtype.locator("option")).toHaveText([
+    "A",
+    "H5N1",
+    "H7N9",
+    "H9N2",
+  ]);
+  await subtype.selectOption("H5N1");
+  await expect(
+    page.getByRole("combobox", { name: "Primer scheme / panel", exact: true }),
+  ).toContainText("Extended influenza (2 primers)");
+  await page.getByLabel("Upload FASTA files").setInputFiles({
+    name: "segments.fa",
+    mimeType: "text/plain",
+    buffer: Buffer.from(
+      `>01-PB2|sample\n${sequence}\n>06-NA|sample\n${sequence}\n`,
+    ),
+  });
+  await expect(page.getByLabel("Batch limits")).toContainText(
+    "2 records · 2 primers · 2 comparisons",
+  );
+  await page
+    .getByRole("button", { name: "Analyze sequences", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Compatibility results", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("2 comparisons", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "PB2_F", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "H3_shared", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "NA_H9", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(
+    page.getByPlaceholder("For eksempel H5N1, H7N9", { exact: true }),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("combobox", { name: "Influensasubtype", exact: true }),
+  ).toHaveValue("H5N1");
+  await expect(
+    page.getByRole("heading", {
+      name: "Kompatibilitetsresultater",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
 test("upload, analyze with real BLAST, inspect mismatch, and download reports", async ({
   page,
 }) => {
@@ -377,7 +470,7 @@ test("format guides download usable templates and explain influenza headers in b
     page.getByRole("button", { name: "Analyze sequences", exact: true }),
   ).toBeEnabled();
   await expect(page.getByLabel("Batch limits")).toContainText(
-    "3 records · 2 primers · 2 comparisons",
+    "8 records · 2 primers · 2 comparisons",
   );
   expect(
     await page.evaluate(

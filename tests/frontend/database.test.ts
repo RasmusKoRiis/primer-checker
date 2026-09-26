@@ -53,3 +53,33 @@ it("includes the custom database in the combined browser upload limit", () => {
     ),
   ).toMatch(/3 MB/);
 });
+
+it("exports arbitrary segments and multiple subtype tags without inferring explicit blanks", () => {
+  const db = JSON.parse(
+    makeDatabase({
+      ...draft,
+      primers: [
+        {
+          ...draft.primers[0],
+          name: "PB2_F",
+          segment: "pb2",
+          subtype: "h5n1, H7N9, h5n1",
+        },
+        {
+          ...draft.primers[0],
+          name: "H3_shared",
+          segment: "custom1",
+          subtype: "",
+        },
+      ],
+    }),
+  );
+  expect(db.schemes[0].primers[0]).toMatchObject({
+    segment: "PB2",
+    subtype_tags: ["H5N1", "H7N9"],
+  });
+  expect(db.schemes[0].primers[1]).toMatchObject({
+    segment: "CUSTOM1",
+    subtype_tags: [],
+  });
+});

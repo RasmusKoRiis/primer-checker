@@ -10,7 +10,7 @@
 - **Accept partial alignments** and penalize missing bases.
 - **Handle ambiguous nucleotide codes** (IUPAC) when counting mismatches.
 - **Report detailed alignment metrics**, including percent identity, mismatch count, and the exact positions of mismatches.
-- **Filter subject sequences** (e.g., for Influenza, only processing sequences matching a specific segment like HA, M, or NS).
+- **Filter subject sequences** (for influenza, compare each primer only with FASTA records carrying its database-defined segment label).
 - **Write an optional local HTML report** for browser-based investigation of organisms, primers, samples, hit status, percent identity, and mismatches.
 
 The canonical output is a CSV report that can be visualized with tools like PowerBI. The optional HTML report is intended for local review after a run.
@@ -47,7 +47,7 @@ After saving, rerun the normal primer-checker command to generate a new HTML rep
 - **Ambiguous Nucleotide Handling:** Custom functions account for IUPAC ambiguity codes so that bases like `Y` or `R` are compared correctly.
 - **Detailed Mismatch Reporting:** In addition to counting mismatches, the script records the positions (1-indexed relative to the primer) where mismatches occur.
 - **Flexible Input:** Processes one or more FASTA files containing subject sequences.
-- **Influenza-Specific Filtering:** For Influenza virus, an additional parameter (`--flu-type`) specifies whether to use the Influenza-A, H1, H3, or Influenza-B primer set. H1/H3 runs use primers tagged for that subtype plus untagged Influenza-A primers, and exclude primers tagged for the other subtype. Sequences are filtered by segment (e.g., HA, M, or NS) based on FASTA header formatting.
+- **Influenza-Specific Filtering:** `--flu-type` selects a type or subtype actually present in the database, such as `A`, `H5N1`, or `B/VICTORIA`. A type selects all its primers; a subtype selects primers with that exact tag plus untagged primers of the same type. Segment labels are defined by the database and matched to FASTA headers, without a fixed segment list.
 - **Batch Folder Wrapper:** `scripts/run_primer_checker_batch.py` can scan a folder of FASTA files, infer the correct virus/subtype from each filename, and write one combined CSV/HTML report.
 - **Optional Sample Metadata:** `--metadata-csv` attaches sample date and assay-specific Ct values to result rows when metadata sample IDs match FASTA headers.
 - **Visual Investigation Report:** `--html-report` writes a self-contained HTML/CSS/JS file that opens directly in a browser and provides filters, primer risk badges, stacked sample-nucleotide percentage charts, mismatch count distributions, detailed documentation, English/Norwegian text toggle, and clickable sample alignment popups.
@@ -273,7 +273,7 @@ python3 scripts/run_primer_checker_batch.py \
 - **--virus:** The virus type to process (e.g., `SARS-CoV-2`, `influenza`, `RSV-A`, `RSV-B`).
 - **--assay-type:** Analyze `pcr`, `ngs`, or `all` records for the selected virus (default: `all`).
 - **--assay-id:** Restrict analysis to one exact PCR `scheme_id` or NGS `panel_id`.
-- **--flu-type:** For Influenza, specify the subtype: `A`, `H1`, `H3`, or `B`.
+- **--flu-type:** For influenza, specify a type or exact subtype label from the database (for example `A`, `H1`, `H5N1`, or `B/VICTORIA`).
 - **--fasta:** One or more FASTA files containing the subject sequences.
 - **--output:** The output CSV file for the report (default: `primer_report.csv`).
 - **--html-report:** Optional self-contained HTML report file.
@@ -343,12 +343,13 @@ Influenza triplex Ct columns are left blank unless triplex Ct fields are added t
 
 `scripts/run_primer_checker_batch.py` is intended for a folder containing several FASTA files from different organisms or subtypes. It supports `.fa`, `.fasta`, `.fna`, and `.fas` files.
 
-Filename routing rules:
+Filename routing rules (influenza choices must exist in the loaded database):
 
 - `H3`, `H3N2` -> `--virus influenza --flu-type H3`
 - `H1`, `H1N1` -> `--virus influenza --flu-type H1`
 - `INFA`, `FLUA` -> `--virus influenza --flu-type A`
 - `INFB`, `FLUB` -> `--virus influenza --flu-type B`
+- Other exact subtype labels, such as `H5N1` or `H7N9`, are read from the database. Exact full tags take priority over H-family fallback; `H1N1` routes to `H1` only if the database has `H1` and no `H1N1` tag. Conflicting subtype labels remain unclassified. Other influenza types can use markers such as `INFC` when that type is in the database.
 - `SC2`, `SARS`, `SARS2`, `COV2`, `COVID`, `COVID19` -> `--virus SARS-CoV-2`
 - `RSVA` -> `--virus RSV-A`
 - `RSVB` -> `--virus RSV-B`
@@ -356,7 +357,7 @@ Filename routing rules:
 
 By default, the batch runner writes both the combined CSV and `batch_primer_report.html`. Use `--analysis-only` to skip HTML report generation. Use `--dry-run` first to verify routing. Use `--fail-on-unclassified` if the run should stop when a filename does not match any rule. Ambiguous `RSV` filenames without `A` or `B` are not classified because the primer database stores RSV-A and RSV-B separately.
 
-For H1/H3 filename-based influenza runs, subtype-specific primer selection is based on primer metadata:
+For all influenza subtype runs, primer selection is based on database metadata. For example:
 
 - H3 FASTA files use Influenza-A primers tagged `H3` plus untagged Influenza-A primers.
 - H1 FASTA files use Influenza-A primers tagged `H1` plus untagged Influenza-A primers.
@@ -373,7 +374,7 @@ For H1/H3 filename-based influenza runs, subtype-specific primer selection is ba
 
 ### Parsing Subject Sequences
 - It reads each FASTA file, extracting subject sequence IDs.
-- For Influenza, the script filters sequences by segment (e.g., `HA`, `M`, or `NS`) using supported header tokens such as `"03-M|252500127"` or `"contig1|03-M|INFL16-2025"`.
+- For influenza, the script matches database segment labels to header tokens such as `"01-PB2|sample"`, `"06-NA|sample"`, or `"contig1|03-M|sample"`. Segment names contain 1–32 letters or digits; matching is case-insensitive. The numeric prefix is not used to infer a segment.
 
 ### BLASTn Alignment
 - For each primer, BLASTn is executed with the primer as the query and the subject sequences as the database.
@@ -515,9 +516,10 @@ supported by the CLI and the installed reference library, not by public uploads.
 
 Choose **Build a database**, enter a name, organism, version, PCR/NGS type, and
 primer names/sequences (5′ → 3′), then **Create database**. Add primers with
-**Add primer**. Role, segment, pool, and influenza A subtype tags are supported.
-Influenza uses organism `Influenza-A` or `Influenza-B` and requires HA/M/NS
-segments, matching the existing engine. The validated database becomes active
+**Add primer**. Role, segment, pool, and influenza subtype tags are supported.
+For influenza, the database specifies the organism type (for example
+`Influenza-A`, `Influenza-B`, `Influenza-C`, or `Influenza-D`) and any segment
+label matching the FASTA headers. The validated database becomes active
 immediately. **Download database JSON** saves it for later uploads or CLI use:
 
 ```bash
@@ -532,6 +534,33 @@ and 200 bases per primer. They never replace the reference database and are not
 saved on the server. The result provenance records the uploaded filename, its
 file hash, and the fingerprint of the primer records actually used. Download
 both the custom database and results if you need to reproduce an analysis later.
+
+Influenza selection is database-driven in both the website and CLI:
+
+- Segment suggestions include `PB2`, `PB1`, `PA`, `HA`, `NP`, `NA`, `M`, and
+  `NS`, but any label with 1–32 letters or digits is valid. A primer with
+  `segment: "PB2"` is compared only with headers such as `>01-PB2|sample`.
+  Header numbers do not determine the segment, and no gene-name aliases are
+  assumed: use matching labels in the database and FASTA.
+- Enter comma-separated subtype tags in the builder, or a JSON list such as
+  `"subtype_tags": ["H5N1", "H7N9"]`. Labels are normalized to uppercase.
+  Matching is exact: `H5` and `H5N1` are distinct selections unless the primer
+  explicitly lists both. Up to 32 tags per primer are accepted; each tag is
+  1–64 letters/digits/dots/underscores/hyphens, starting with a letter or digit.
+- An explicit empty list `[]` (a blank builder field) means the primer is
+  shared by all subtypes of that influenza type. If the field is omitted,
+  legacy name tokens such as `H5` or `H5N1` may supply tags. Legacy segment
+  inference recognizes the usual segment names; use explicit metadata for
+  other labels.
+- The menu lists only types and tags present in the loaded database. `A` or
+  `B` selects every primer for that type. A subtype selects its tagged primers
+  plus untagged primers of the same type. A-subtype names retain short IDs
+  such as `H1`; other types use qualified IDs such as `B/VICTORIA` to avoid
+  mixing organisms. Assay choices and counts reflect the selected subtype.
+
+The downloadable influenza example contains all eight usual segment labels
+and both `H1` and `H5N1` primers. It contains synthetic sequences for checking
+file format and selection behavior, not biological assay validation.
 
 ### API
 

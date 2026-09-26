@@ -35,7 +35,14 @@ export function makeDatabase(draft: DatabaseDraft): string {
       role: p.role,
       segment: p.segment.trim().toUpperCase(),
       pool: p.pool.trim(),
-      subtype_tags: p.subtype ? [p.subtype] : [],
+      subtype_tags: [
+        ...new Set(
+          p.subtype
+            .split(",")
+            .map((tag) => tag.trim().toUpperCase())
+            .filter(Boolean),
+        ),
+      ],
     };
   });
   return JSON.stringify(

@@ -106,7 +106,9 @@ def main() -> None:
     unclassified: list[Path] = []
     available_organisms = list(primer_records)
     for fasta_file in fasta_files:
-        target = primer_analysis.infer_analysis_target_from_filename(str(fasta_file), available_organisms=available_organisms)
+        target = primer_analysis.infer_analysis_target_from_filename(
+            str(fasta_file), available_organisms=available_organisms, primer_records=primer_records
+        )
         print(f"{fasta_file}: {describe_target(target)}")
         if target is None:
             unclassified.append(fasta_file)

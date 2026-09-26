@@ -248,6 +248,8 @@ export default function DatabasePicker({
                 "SARS-CoV-2",
                 "Influenza-A",
                 "Influenza-B",
+                "Influenza-C",
+                "Influenza-D",
                 "RSV-A",
                 "RSV-B",
               ].map((v) => (
@@ -347,20 +349,18 @@ export default function DatabasePicker({
                   </label>
                   <label className="field">
                     {t("Segment")}
-                    <select
+                    <input
                       aria-label={t("Primer {number} segment", {
                         number: i + 1,
                       })}
                       value={primer.segment}
+                      list="database-segments"
+                      maxLength={32}
+                      placeholder={t("For example PB2, HA, NA")}
                       onChange={(e) =>
                         updatePrimer(primer.key, "segment", e.target.value)
                       }
-                    >
-                      <option value="">{t("None")}</option>
-                      {["HA", "M", "NS"].map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
+                    />
                   </label>
                   <label className="field">
                     {t("Pool (optional)")}
@@ -373,33 +373,36 @@ export default function DatabasePicker({
                       }
                     />
                   </label>
-                  {organism === "Influenza-A" && (
+                  {/^influenza-/i.test(organism.trim()) && (
                     <label className="field">
-                      {t("Subtype")}
-                      <select
+                      {t("Subtype tags (optional)")}
+                      <input
                         aria-label={t("Primer {number} subtype", {
                           number: i + 1,
                         })}
                         value={primer.subtype}
+                        maxLength={1000}
+                        placeholder={t("For example H5N1, H7N9")}
                         onChange={(e) =>
                           updatePrimer(primer.key, "subtype", e.target.value)
                         }
-                      >
-                        <option value="">
-                          {t("Infer from name / untagged")}
-                        </option>
-                        <option>{t("H1")}</option>
-                        <option>{t("H3")}</option>
-                      </select>
+                      />
                     </label>
                   )}
                 </div>
               </div>
             ))}
           </div>
+          <datalist id="database-segments">
+            {["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS", "HEF", "P3"].map(
+              (s) => (
+                <option key={s} value={s} />
+              ),
+            )}
+          </datalist>
           <p className="database-hint">
             {t(
-              "Up to {primers} primers, {bases} bases each. Influenza primers require HA, M, or NS segments and matching segment labels in sequence headers.",
+              "Up to {primers} primers, {bases} bases each. For influenza, enter a segment matching your FASTA headers. Any segment label with 1–32 letters or digits is accepted. Separate subtype tags with commas; leave blank for primers shared by all subtypes of that influenza type.",
               {
                 primers: limits?.database_primers || 500,
                 bases: limits?.primer_length || 200,

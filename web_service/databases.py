@@ -22,7 +22,9 @@ class Primer(BaseModel):
     segment: OptionalText
     pool: OptionalText = ""
     strand: Literal["", "+", "-"] = ""
-    subtype_tags: list[Literal["H1", "H3"]] = Field(default_factory=list, max_length=2)
+    subtype_tags: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")]
+    ] = Field(default_factory=list, max_length=32)
 
 
 class Scheme(BaseModel):
@@ -91,7 +93,7 @@ def load_uploaded(data: bytes):
         records = engine.legacy_library_to_records(raw)
     else:
         try:
-            normalized = Database.model_validate(raw).model_dump()
+            normalized = Database.model_validate(raw).model_dump(exclude_unset=True)
         except ValidationError as exc:
             first = exc.errors(include_input=False, include_url=False)[0]
             location = ".".join(str(part) for part in first["loc"])
@@ -107,5 +109,7 @@ def load_uploaded(data: bytes):
     if sum(map(len, records.values())) > MAX_PRIMERS:
         raise ValueError(f"A custom database may contain at most {MAX_PRIMERS} primers.")
     if any(name.casefold() == "influenza" for name in records):
-        raise ValueError("Use organism Influenza-A or Influenza-B so subtype selection is unambiguous.")
+        raise ValueError(
+            "Specify the influenza type in organism, for example Influenza-A or Influenza-B; put subtype labels in subtype_tags."
+        )
     return records, validation

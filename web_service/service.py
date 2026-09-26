@@ -79,18 +79,18 @@ def load_database(upload: tuple[str, bytes] | None = None):
 def catalog(upload: tuple[str, bytes] | None = None) -> dict:
     records, database, validation = load_database(upload)
     viruses = []
-    if "Influenza-A" in records or "Influenza-B" in records:
+    selections = engine.influenza_selections(records)
+    flu_organisms = {selection["organism"] for selection in selections.values()}
+    if selections:
         viruses.append(
             {
                 "id": "influenza",
                 "name": "Influenza",
-                "subtypes": (["A", "H1", "H3"] if "Influenza-A" in records else [])
-                + (["B"] if "Influenza-B" in records else []),
+                "subtypes": list(selections),
+                "selections": selections,
             }
         )
-    viruses.extend(
-        {"id": name, "name": name, "subtypes": []} for name in records if name not in {"Influenza-A", "Influenza-B"}
-    )
+    viruses.extend({"id": name, "name": name, "subtypes": []} for name in records if name not in flu_organisms)
     assays = {}
     for group in records.values():
         for p in group:
@@ -102,8 +102,15 @@ def catalog(upload: tuple[str, bytes] | None = None) -> dict:
                     "organism": p.organism,
                     "type": p.assay_type,
                     "primers": 0,
+                    "untagged_primers": 0,
+                    "subtype_counts": {},
                 }
             assays[key]["primers"] += 1
+            if not p.subtype_tags:
+                assays[key]["untagged_primers"] += 1
+            for tag in p.subtype_tags:
+                counts = assays[key]["subtype_counts"]
+                counts[tag] = counts.get(tag, 0) + 1
     return {
         "application_version": APP_VERSION,
         "database": database,
@@ -248,7 +255,9 @@ def prepare_analysis(
     if assay_type not in {"pcr", "ngs", "all"}:
         raise WebError("Select PCR, NGS, or All assays.", "invalid_selection")
     allowed_viruses = set(records) | {"influenza"}
-    if virus not in allowed_viruses or (virus == "influenza" and flu_type not in {"A", "H1", "H3", "B"}):
+    if virus not in allowed_viruses or (
+        virus == "influenza" and (flu_type or "").strip().upper() not in engine.influenza_selections(records)
+    ):
         raise WebError("Select an available virus and an influenza subtype when applicable.", "invalid_selection")
     if virus != "influenza" and flu_type:
         raise WebError("Influenza subtype is only valid for Influenza.", "invalid_selection")

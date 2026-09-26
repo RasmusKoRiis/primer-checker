@@ -35,8 +35,7 @@ def main():
     parser.add_argument(
         "--flu-type",
         type=str,
-        choices=["A", "H1", "H3", "B"],
-        help="For influenza, specify subtype: A (full A-panel), H1, H3 or B."
+        help="Influenza type or subtype from the database, e.g. A (all A primers), H5N1, or B/VICTORIA."
     )
     parser.add_argument(
         "--assay-type",

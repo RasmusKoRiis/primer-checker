@@ -1,7 +1,7 @@
 {
   "fasta": {
     "general": ">sample_001 optional description\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>sample_002\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n",
-    "influenza": ">01-HA|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>03-M|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>08-NS|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n"
+    "influenza": ">01-HA|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>03-M|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>08-NS|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>01-PB2|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>02-PB1|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>03-PA|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>05-NP|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n>06-NA|sample_001\nACGTTGCAAGCTTAGCGATCGATGCTAGCANNNNNTGGCATCGTACGATGCACTAGCATGCTACG\n"
   },
   "databases": {
     "normalized": {
@@ -50,14 +50,37 @@
               "sequence": "ACGTTGCAAGCTTAGCGATCGATGCTAGCA",
               "role": "forward",
               "segment": "HA",
-              "subtype_tags": ["H1"]
+              "subtype_tags": [
+                "H1"
+              ]
             },
             {
               "id": "M_F",
               "name": "M_F",
               "sequence": "TGGCATCGTACGATGCACTAGCATGCTACG",
               "role": "forward",
-              "segment": "M"
+              "segment": "M",
+              "subtype_tags": []
+            },
+            {
+              "id": "PB2_F",
+              "name": "PB2_F",
+              "sequence": "CGTTGCAAGCTTAGCGATCGATGCTAGCA",
+              "role": "forward",
+              "segment": "PB2",
+              "subtype_tags": [
+                "H5N1"
+              ]
+            },
+            {
+              "id": "NA_F",
+              "name": "NA_F",
+              "sequence": "GGCATCGTACGATGCACTAGCATGCTACG",
+              "role": "forward",
+              "segment": "NA",
+              "subtype_tags": [
+                "H5N1"
+              ]
             }
           ]
         }

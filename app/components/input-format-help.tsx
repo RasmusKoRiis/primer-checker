@@ -41,7 +41,7 @@ export function FastaFormatHelp({ expanded = false }: { expanded?: boolean }) {
           <strong>{t("Influenza needs segment labels")}</strong>
           <p>
             {t(
-              "Use a pipe-separated tag such as 01-HA, 03-M, or 08-NS before any spaces. The parser reads HA, M, or NS from a tag with one or two digits and a hyphen; the digits do not determine the segment. Primers are compared only with the matching segment.",
+              "Use a pipe-separated tag such as 01-PB2, 06-NA, or 08-NS before any spaces. The parser reads the segment after one or two digits and a hyphen; the digits do not determine the segment. Any label with 1–32 letters or digits is supported when it matches the primer database. Primers are compared only with that segment.",
             )}
           </p>
           <p>
@@ -195,7 +195,7 @@ export function DatabaseFormatHelp({
           </dt>
           <dd>
             {t(
-              'For influenza, use organism "Influenza-A" or "Influenza-B" and segment "HA", "M", or "NS". Optional subtype_tags ["H1"] or ["H3"] restrict Influenza-A primers to that subtype; an empty list includes them in both selections. These segment labels must match your FASTA headers.',
+              'For influenza, specify the type in organism (for example "Influenza-A", "Influenza-B", "Influenza-C", or "Influenza-D"). Segment labels come from your database, for example "PB2", "PB1", "PA", "HA", "NP", "NA", "M", or "NS", and must match the FASTA headers. subtype_tags accepts labels such as ["H5N1", "H7N9"]. A selected tag matches exactly: "H5" does not automatically include "H5N1". List both tags to include a primer in both selections. An explicit empty list [] makes a primer shared by all subtypes of its influenza type; omitted tags can be inferred from legacy primer names. The subtype menu shows only types and tags present in the database; a type such as A selects all its primers, while other types use labels such as B/VICTORIA.',
             )}
           </dd>
           <dt>

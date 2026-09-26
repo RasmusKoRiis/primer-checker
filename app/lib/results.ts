@@ -7,13 +7,20 @@ export interface Catalog {
     filename?: string;
   };
   warnings?: string[];
-  viruses: { id: string; name: string; subtypes: string[] }[];
+  viruses: {
+    id: string;
+    name: string;
+    subtypes: string[];
+    selections?: Record<string, { organism: string; tag: string | null }>;
+  }[];
   assays: {
     id: string;
     name: string;
     organism: string;
     type: string;
     primers: number;
+    untagged_primers: number;
+    subtype_counts: Record<string, number>;
   }[];
   limits: {
     upload_bytes: number;

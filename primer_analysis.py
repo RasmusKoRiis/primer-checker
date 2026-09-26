@@ -33,7 +33,10 @@ AMBIGUITY_CODES = {
     'N': {'A', 'C', 'G', 'T'}
 }
 ALLOWED_SEQUENCE_CODES = set(AMBIGUITY_CODES)
-INFLUENZA_SEGMENTS = {"HA", "M", "NS"}
+# Suggestions for legacy name inference only; explicit database segments are not restricted to this list.
+LEGACY_INFLUENZA_SEGMENTS = ("HA", "NS", "M", "PB2", "PB1", "PA", "NP", "NA", "HEF", "P3")
+SEGMENT_PATTERN = r"[A-Za-z0-9]{1,32}"
+SUBTYPE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
 CSV_FIELDNAMES = [
     "Fasta_File",
     "Virus_Type",
@@ -324,7 +327,7 @@ def infer_primer_segment(organism: str, primer_name: str) -> str:
     if not organism.upper().startswith("INFLUENZA"):
         return ""
     tokens = tokenize_name(primer_name)
-    for segment in ("HA", "NS", "M"):
+    for segment in LEGACY_INFLUENZA_SEGMENTS:
         if segment in tokens:
             return segment
     return ""
@@ -332,32 +335,79 @@ def infer_primer_segment(organism: str, primer_name: str) -> str:
 
 def infer_subtype_tags(primer_name: str) -> tuple[str, ...]:
     tokens = tokenize_name(primer_name)
-    return tuple(tag for tag in ("H1", "H3") if tag in tokens)
+    return tuple(sorted({tag for tag in tokens if re.fullmatch(r"H[1-9]\d*(?:N[1-9]\d*)?|N[1-9]\d*", tag)}))
 
 
-def infer_analysis_target_from_filename(fasta_file: str, available_organisms: list[str] | None = None) -> AnalysisTarget | None:
+def read_subtype_tags(metadata: dict, primer_name: str) -> tuple[str, ...]:
+    """Explicit [] means untagged; infer legacy names only when the field is absent."""
+    tags = metadata.get("subtype_tags", infer_subtype_tags(primer_name))
+    return tuple(dict.fromkeys(tag.strip().upper() for tag in tags))
+
+
+def validate_selection_metadata(metadata: dict, organism: str, context: str, result: ValidationResult, require_segment: bool = True):
+    segment = metadata.get("segment", "")
+    if segment is None:
+        segment = ""
+    if not isinstance(segment, str):
+        result.errors.append(f"{context} field 'segment' must be a string.")
+    elif isinstance(organism, str) and organism.upper().startswith("INFLUENZA"):
+        if (segment or require_segment) and not re.fullmatch(SEGMENT_PATTERN, segment.strip()):
+            result.errors.append(f"{context}: influenza segments must contain 1–32 letters or digits and match FASTA segment labels.")
+    if "subtype_tags" in metadata:
+        tags = metadata["subtype_tags"]
+        if not isinstance(tags, list) or len(tags) > 32 or any(
+            not isinstance(tag, str) or not re.fullmatch(SUBTYPE_PATTERN, tag.strip()) for tag in tags
+        ):
+            result.errors.append(f"{context}: subtype_tags must be a list of at most 32 labels, each 1–64 letters, digits, dots, underscores, or hyphens, starting with a letter or digit.")
+
+
+def infer_analysis_target_from_filename(
+    fasta_file: str,
+    available_organisms: list[str] | None = None,
+    primer_records: dict[str, list[PrimerRecord]] | None = None,
+) -> AnalysisTarget | None:
     """
     Infer the primer target from a FASTA filename.
 
-    This is intentionally conservative: H1/H3 influenza subtype rules are applied
-    before broader Influenza-A rules, and ambiguous RSV names without A/B are left
-    unclassified because the primer database stores RSV-A and RSV-B separately.
+    Prefer exact subtype labels in the loaded database. Ambiguous subtype names
+    and RSV filenames without A/B are left unclassified.
     """
     stem = os.path.splitext(os.path.basename(fasta_file))[0]
     upper_stem = stem.upper()
     tokens = set(tokenize_name(stem))
     compact = re.sub(r"[^A-Z0-9]+", "", upper_stem)
 
+    if primer_records is not None:
+        choices = influenza_selections(primer_records)
+        matching = [key for key, choice in choices.items() if choice["tag"] and re.search(
+            rf"(?<![A-Z0-9]){re.escape(choice['tag'])}(?![A-Z0-9])", upper_stem
+        )]
+        if not matching:
+            # Preserve H1N1 -> H1 / H3N2 -> H3 when only an H-family tag exists.
+            h_families = {re.match(r"H[1-9]\d*", token).group() for token in tokens
+                          if re.fullmatch(r"H[1-9]\d*N[1-9]\d*", token)}
+            matching = [tag for tag in h_families if tag in choices and choices[tag]["tag"] == tag]
+        if len(matching) == 1:
+            return AnalysisTarget("influenza", matching[0], f"filename matches database subtype '{matching[0]}'")
+        if matching or any(re.fullmatch(r"H[1-9]\d*(?:N[1-9]\d*)?", token) for token in tokens):
+            return None
+        for key, choice in choices.items():
+            if choice["tag"] is not None:
+                continue
+            markers = {f"INF{key}", f"FLU{key}", f"INFLUENZA{key}"}
+            if tokens & markers or any(compact.startswith(marker) for marker in markers):
+                return AnalysisTarget("influenza", key, f"filename contains Influenza-{key} marker")
+
     has_h3 = "H3" in tokens or "H3N2" in tokens or bool(re.search(r"(^|[^A-Z0-9])H3(N2)?($|[^A-Z0-9])", upper_stem))
     has_h1 = "H1" in tokens or "H1N1" in tokens or bool(re.search(r"(^|[^A-Z0-9])H1(N1)?($|[^A-Z0-9])", upper_stem))
-    if has_h3:
+    if primer_records is None and has_h3:
         return AnalysisTarget("influenza", "H3", "filename contains H3/H3N2")
-    if has_h1:
+    if primer_records is None and has_h1:
         return AnalysisTarget("influenza", "H1", "filename contains H1/H1N1")
 
-    if tokens & {"INFB", "FLUB"} or compact in {"INFB", "FLUB", "INFLUENZAB"} or compact.startswith(("INFB", "FLUB")):
+    if primer_records is None and (tokens & {"INFB", "FLUB"} or compact.startswith(("INFB", "FLUB", "INFLUENZAB"))):
         return AnalysisTarget("influenza", "B", "filename contains Influenza-B marker")
-    if tokens & {"INFA", "FLUA"} or compact in {"INFA", "FLUA", "INFLUENZAA"} or compact.startswith(("INFA", "FLUA")):
+    if primer_records is None and (tokens & {"INFA", "FLUA"} or compact.startswith(("INFA", "FLUA", "INFLUENZAA"))):
         return AnalysisTarget("influenza", "A", "filename contains Influenza-A marker")
 
     if tokens & {"RSVA", "RSV-A"} or compact.startswith("RSVA"):
@@ -756,7 +806,7 @@ def validate_legacy_primer_library(primer_library: object) -> ValidationResult:
                 sequences_seen[normalized_sequence] = primer_name
 
             if organism.upper().startswith("INFLUENZA") and not infer_primer_segment(organism, primer_name):
-                result.warnings.append(f"{context} has no inferable HA, M, or NS segment in the legacy primer name.")
+                result.warnings.append(f"{context} has no inferable influenza segment in the legacy primer name; use explicit segment metadata for custom labels.")
 
             if infer_primer_role(primer_name) == "probe":
                 result.warnings.append(f"{context} appears to be a probe; the legacy format cannot store role metadata explicitly.")
@@ -1074,6 +1124,7 @@ def validate_panel_primer_library(primer_library: object, library_file: str | No
         for field_name in ("display_name", "organism", "panel_version"):
             if field_name in panel and (not isinstance(panel[field_name], str) or not panel[field_name].strip()):
                 result.errors.append(f"{context} field '{field_name}' must be a non-empty string.")
+        validate_selection_metadata(panel, panel.get("organism", ""), context, result, require_segment=False)
         files = panel.get("files")
         if not isinstance(files, dict):
             result.errors.append(f"{context} field 'files' must be an object.")
@@ -1127,7 +1178,7 @@ def panel_library_to_records(primer_library: dict, library_file: str, validation
                     sequence=sequence,
                     segment=(panel.get("segment") or "").strip().upper(),
                     role=panel_primer_role(name, entry, pattern_roles),
-                    subtype_tags=tuple(panel.get("subtype_tags") or infer_subtype_tags(name)),
+                    subtype_tags=read_subtype_tags(panel, name),
                     scheme_id=panel_id,
                     scheme_version=panel_version,
                     database_version=database_version,
@@ -1158,7 +1209,7 @@ def panel_library_to_records(primer_library: dict, library_file: str, validation
                     sequence=sequence,
                     segment=(panel.get("segment") or "").strip().upper(),
                     role=panel_primer_role(name, entry, pattern_roles),
-                    subtype_tags=tuple(panel.get("subtype_tags") or infer_subtype_tags(name)),
+                    subtype_tags=read_subtype_tags(panel, name),
                     scheme_id=panel_id,
                     scheme_version=panel_version,
                     database_version=database_version,
@@ -1288,13 +1339,7 @@ def validate_normalized_primer_library(primer_library: object) -> ValidationResu
             else:
                 sequences_seen[normalized_sequence] = str(primer_name)
 
-            segment = primer.get("segment", "")
-            if segment is None:
-                segment = ""
-            if not isinstance(segment, str):
-                result.errors.append(f"{primer_context} field 'segment' must be a string.")
-            elif organism.upper().startswith("INFLUENZA") and segment.upper() not in INFLUENZA_SEGMENTS:
-                result.errors.append(f"{primer_context} has unsupported influenza segment '{segment}'.")
+            validate_selection_metadata(primer, organism, primer_context, result)
 
     return result
 
@@ -1308,7 +1353,7 @@ def normalized_library_to_records(primer_library: dict) -> dict[str, list[Primer
         scheme_version = scheme["version"]
         records = records_by_organism.setdefault(organism, [])
         for primer in scheme["primers"]:
-            subtype_tags = tuple(primer.get("subtype_tags") or infer_subtype_tags(primer.get("name", "")))
+            subtype_tags = read_subtype_tags(primer, primer.get("name", ""))
             records.append(
                 PrimerRecord(
                     organism=organism,
@@ -1438,57 +1483,42 @@ def load_primer_library(library_file: str) -> dict:
         sys.exit(f"Error loading primer library from {library_file}: {e}")
 
 def build_influenza_subtype_primers(primer_library: dict, subtype: str) -> dict:
+    """Compatibility helper using the same database-driven selection as the CLI/API."""
+    selected = build_influenza_subtype_records(legacy_library_to_records(primer_library), subtype)
+    names = {(record.organism, record.name) for record in selected}
+    return {name: sequence for organism, primers in primer_library.items() for name, sequence in primers.items()
+            if (organism, name.strip()) in names}
+
+
+def influenza_selections(primer_records: dict[str, list[PrimerRecord]]) -> dict[str, dict]:
+    """Available types and exact subtype labels, derived only from loaded records.
+
+    A-subtypes retain H1/H3-style IDs for compatibility. Other types use B/VIC,
+    C/label, etc. so labels shared by different organisms cannot be mixed.
     """
-    Legacy dict helper for selecting Influenza-A H1/H3 primers.
-
-    H1/H3 use primer names tagged for that subtype plus untagged Influenza-A
-    primer names, and exclude names tagged for the other subtype.
-    """
-    generic = primer_library.get("Influenza-A")
-    if generic is None:
-        sys.exit("Primer JSON lacks the 'Influenza-A' section.")
-
-    subtype = subtype.upper()
-    if subtype == "A":
-        return generic  # full A panel
-
-    if subtype in {"H1", "H3"}:
-        subset = {}
-        for primer_name, sequence in generic.items():
-            tags = infer_subtype_tags(primer_name)
-            if subtype in tags or not tags:
-                subset[primer_name] = sequence
-        if not subset:
-            sys.exit(f"No {subtype} primers found inside 'Influenza-A'.")
-        return subset
-
-    sys.exit(f"Unsupported Influenza-A subtype '{subtype}'.")
+    groups = {}
+    for organism, records in primer_records.items():
+        match = re.fullmatch(r"Influenza-([A-Za-z0-9]+)", organism, re.IGNORECASE)
+        if match and records:
+            groups[match.group(1).upper()] = organism
+    choices = {}
+    for flu_type, organism in sorted(groups.items()):
+        choices[flu_type] = {"organism": organism, "tag": None}
+        tags = sorted({tag for p in primer_records[organism] for tag in p.subtype_tags})
+        for tag in tags:
+            key = tag if flu_type == "A" and tag not in groups else f"{flu_type}/{tag}"
+            choices[key] = {"organism": organism, "tag": tag}
+    return choices
 
 
 def build_influenza_subtype_records(primer_records: dict[str, list[PrimerRecord]], subtype: str) -> list[PrimerRecord]:
-    """
-    Select Influenza-A records for A, H1, or H3. H1/H3 include subtype-specific
-    records plus records without subtype tags, and exclude records tagged for the
-    other subtype.
-    """
-    generic = primer_records.get("Influenza-A")
-    if generic is None:
-        sys.exit("Primer JSON lacks the 'Influenza-A' section.")
-
-    subtype = subtype.upper()
-    if subtype == "A":
-        return generic
-
-    if subtype in {"H1", "H3"}:
-        subset = [
-            record for record in generic
-            if subtype in record.subtype_tags or not record.subtype_tags
-        ]
-        if not subset:
-            sys.exit(f"No {subtype} primers found inside 'Influenza-A'.")
-        return subset
-
-    sys.exit(f"Unsupported Influenza-A subtype '{subtype}'.")
+    """Select the database's exact subtype tag plus untagged primers of that type."""
+    choices = influenza_selections(primer_records)
+    selection = choices.get(subtype.strip().upper())
+    if selection is None:
+        sys.exit(f"Influenza selection '{subtype}' is not in the database. Available: {', '.join(choices)}.")
+    return [record for record in primer_records[selection["organism"]]
+            if selection["tag"] is None or not record.subtype_tags or selection["tag"] in record.subtype_tags]
 
 
 def _filter_assay_records(
@@ -1529,15 +1559,9 @@ def select_primer_records(
         return canonical_virus, _filter_assay_records(selected, assay_type, assay_id)
 
     if not flu_type:
-        sys.exit("Error: for influenza please supply --flu-type A, H1, H3 or B.")
+        sys.exit(f"For influenza supply --flu-type from the database: {', '.join(influenza_selections(primer_records))}.")
 
-    subtype = flu_type.upper()
-    if subtype == "B":
-        selected = primer_records.get("Influenza-B")
-        if not selected:
-            sys.exit("Primer JSON lacks the 'Influenza-B' section.")
-        return "Influenza-B", _filter_assay_records(selected, assay_type, assay_id)
-
+    subtype = flu_type.strip().upper()
     selected = build_influenza_subtype_records(primer_records, subtype)
     return f"Influenza-{subtype}", _filter_assay_records(selected, assay_type, assay_id)
 
