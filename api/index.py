@@ -97,15 +97,38 @@ def health():
     return {"status": "ok", "application_version": service.APP_VERSION, "blast_version": version}
 
 
+@app.post("/api/database")
+async def database(request: Request):
+    try:
+        async with request.form(max_files=1, max_fields=0, max_part_size=service.databases.MAX_DATABASE_BYTES) as form:
+            upload = form.get("database")
+            if set(form) != {"database"} or len(form.getlist("database")) != 1 or not isinstance(upload, UploadFile):
+                raise service.WebError("Choose one JSON primer database.", "invalid_database")
+            data = (upload.filename or "", await upload.read(service.databases.MAX_DATABASE_BYTES + 1))
+            result = await run_in_threadpool(service.catalog, data)
+    except HTTPException:
+        raise service.WebError("Choose one JSON primer database, at most 250 kB.", "invalid_database") from None
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/preflight")
+async def preflight(request: Request):
+    return await analysis_request(request, service.preflight)
+
+
 @app.post("/api/analyze")
 async def analyze(request: Request):
+    return await analysis_request(request, service.analyze)
+
+
+async def analysis_request(request: Request, operation):
     if not request.headers.get("content-type", "").startswith("multipart/form-data"):
         raise service.WebError("Send FASTA files as a multipart form upload.")
     try:
         async with request.form(
-            max_files=service.MAX_FILES + 1, max_fields=4, max_part_size=service.MAX_UPLOAD_BYTES
+            max_files=service.MAX_FILES + 2, max_fields=4, max_part_size=service.MAX_UPLOAD_BYTES
         ) as form:
-            allowed = {"files", "metadata", "virus", "flu_type", "assay_type", "assay_id"}
+            allowed = {"files", "metadata", "database", "virus", "flu_type", "assay_type", "assay_id"}
             if set(form) - allowed:
                 raise service.WebError("The upload contains unsupported form fields.")
             for key in allowed - {"files"}:
@@ -117,6 +140,9 @@ async def analyze(request: Request):
             metadata = form.get("metadata")
             if metadata is not None and not isinstance(metadata, UploadFile):
                 raise service.WebError("Metadata must be a CSV file.", "invalid_metadata")
+            database = form.get("database")
+            if database is not None and not isinstance(database, UploadFile):
+                raise service.WebError("Database must be a JSON file.", "invalid_database")
             options = {}
             for name in ("virus", "flu_type", "assay_type", "assay_id"):
                 value = form.get(name, "pcr" if name == "assay_type" else "")
@@ -125,7 +151,12 @@ async def analyze(request: Request):
                 options[name] = value or None
             files = [(f.filename or "", await f.read(service.MAX_UPLOAD_BYTES + 1)) for f in uploads]
             meta = (metadata.filename or "", await metadata.read(service.MAX_UPLOAD_BYTES + 1)) if metadata else None
-            result = await run_in_threadpool(service.analyze, files, meta, **options)
+            db = (
+                (database.filename or "", await database.read(service.databases.MAX_DATABASE_BYTES + 1))
+                if database
+                else None
+            )
+            result = await run_in_threadpool(operation, files, meta, database_upload=db, **options)
     except HTTPException:
         raise service.WebError("Malformed upload or too many files/form fields.", "invalid_upload") from None
     encoded = json.dumps(result, ensure_ascii=True, allow_nan=False, separators=(",", ":"))

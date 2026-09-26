@@ -10,12 +10,14 @@ import re
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 import primer_analysis as engine
 import primer_report
+from web_service import databases
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_VERSION = "0.1.0"
@@ -25,7 +27,8 @@ MAX_RESPONSE_BYTES = 4_000_000
 MAX_FILES = 10
 MAX_RECORDS = 200
 MAX_COMPARISONS = 2000
-MAX_BLAST_CALLS = 1200
+MAX_BLAST_CALLS = 300
+MAX_BASE_COMPARISONS = 50_000_000
 ANALYSIS_SECONDS = 240
 
 
@@ -39,33 +42,42 @@ def database_path() -> Path:
     return Path(os.environ.get("PRIMER_DATABASE_PATH", ROOT / "primer_db/fhi_primers.unified.json"))
 
 
-def load_database():
-    try:
-        path = database_path()
-        records, validation = engine.load_primer_records(str(path))
-        # Include loaded primer sequences/metadata, including BED/FASTA assets, in the fingerprint.
-        # source_file is installation-dependent, so exclude it from reproducibility fingerprints.
-        canonical = json.dumps(
-            [{k: v for k, v in asdict(p).items() if k != "source_file"} for group in records.values() for p in group],
-            sort_keys=True,
-        )
-        versions = sorted({p.database_version for group in records.values() for p in group if p.database_version})
-        return (
-            records,
-            {
-                "version": ", ".join(versions) or "unversioned",
-                "sha256": hashlib.sha256(canonical.encode()).hexdigest(),
-            },
-            validation,
-        )
-    except (SystemExit, Exception):  # noqa: BLE001 - never expose local database paths
-        raise WebError(
-            "The primer database could not be loaded. Contact the deployment maintainer.", "database_error", 503
-        ) from None
+def load_database(upload: tuple[str, bytes] | None = None):
+    if upload:
+        name = safe_filename(upload[0], {".json"})
+        if len(upload[1]) > databases.MAX_DATABASE_BYTES:
+            raise WebError("Custom databases must be at most 250 kB.", "database_too_large", 413)
+        try:
+            records, validation = databases.load_uploaded(upload[1])
+        except ValueError as exc:
+            raise WebError(str(exc), "invalid_database") from None
+        source = {"source": "uploaded", "filename": name, "file_sha256": hashlib.sha256(upload[1]).hexdigest()}
+    else:
+        try:
+            records, validation = engine.load_primer_records(str(database_path()))
+        except (SystemExit, Exception):  # noqa: BLE001 - never expose local database paths
+            raise WebError(
+                "The primer database could not be loaded. Contact the deployment maintainer.", "database_error", 503
+            ) from None
+        source = {"source": "bundled"}
+    canonical = json.dumps(
+        [{k: v for k, v in asdict(p).items() if k != "source_file"} for group in records.values() for p in group],
+        sort_keys=True,
+    )
+    versions = sorted({p.database_version for group in records.values() for p in group if p.database_version})
+    return (
+        records,
+        {
+            "version": ", ".join(versions) or "unversioned",
+            "sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+            **source,
+        },
+        validation,
+    )
 
 
-def catalog() -> dict:
-    records, database, _ = load_database()
+def catalog(upload: tuple[str, bytes] | None = None) -> dict:
+    records, database, validation = load_database(upload)
     viruses = []
     if "Influenza-A" in records or "Influenza-B" in records:
         viruses.append(
@@ -97,11 +109,19 @@ def catalog() -> dict:
         "database": database,
         "viruses": viruses,
         "assays": list(assays.values()),
+        "warnings": validation.warnings
+        if upload
+        else (["The reference database has validation warnings."] if validation.warnings else []),
         "limits": {
             "upload_bytes": MAX_UPLOAD_BYTES,
             "files": MAX_FILES,
             "records": MAX_RECORDS,
             "comparisons": MAX_COMPARISONS,
+            "blast_calls": MAX_BLAST_CALLS,
+            "base_comparisons": MAX_BASE_COMPARISONS,
+            "database_bytes": databases.MAX_DATABASE_BYTES,
+            "database_primers": databases.MAX_PRIMERS,
+            "primer_length": databases.MAX_PRIMER_LENGTH,
         },
     }
 
@@ -110,7 +130,7 @@ def safe_filename(name: str, suffixes: set[str]) -> str:
     name = name.replace("\\", "/").split("/")[-1]
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip(".")[:100]
     if not name or Path(name).suffix.lower() not in suffixes:
-        raise WebError("Choose FASTA files (.fasta, .fa, .fna, .fas) and a .csv metadata file.")
+        raise WebError("Choose FASTA sequence files, .csv metadata, or a .json primer database.")
     return name
 
 
@@ -203,22 +223,28 @@ def blast_version() -> tuple[str, str]:
     return executable, version
 
 
-def analyze(
+@contextmanager
+def prepare_analysis(
     files: list[tuple[str, bytes]],
     metadata: tuple[str, bytes] | None,
     virus: str,
     flu_type: str | None,
     assay_type: str,
     assay_id: str | None,
-) -> dict:
-    started = time.monotonic()
+    database_upload: tuple[str, bytes] | None = None,
+):
     if not files or len(files) > MAX_FILES:
         raise WebError(f"Upload between 1 and {MAX_FILES} FASTA files.")
-    if sum(len(data) for _, data in files) + (len(metadata[1]) if metadata else 0) > MAX_UPLOAD_BYTES:
+    upload_bytes = (
+        sum(len(data) for _, data in files)
+        + (len(metadata[1]) if metadata else 0)
+        + (len(database_upload[1]) if database_upload else 0)
+    )
+    if upload_bytes > MAX_UPLOAD_BYTES:
         raise WebError(
             "Combined uploads exceed the 3 MB limit. Split the analysis into smaller batches.", "upload_too_large", 413
         )
-    records, database, validation = load_database()
+    records, database, validation = load_database(database_upload)
     if assay_type not in {"pcr", "ngs", "all"}:
         raise WebError("Select PCR, NGS, or All assays.", "invalid_selection")
     allowed_viruses = set(records) | {"influenza"}
@@ -239,7 +265,7 @@ def analyze(
         warnings.append(
             "The primer database has validation warnings; the maintainer should review it with --validate-primers."
         )
-    rows, inputs, total_records = [], [], 0
+    inputs, total_records, total_bases = [], 0, 0
     with tempfile.TemporaryDirectory(prefix="primer-web-") as folder:
         root = Path(folder)
         metadata_records = []
@@ -265,7 +291,15 @@ def analyze(
             used_names.add(name)
             path = root / str(index) / name
             path.parent.mkdir()
-            path.write_text(validate_fasta(data), encoding="utf-8")
+            fasta = validate_fasta(data)
+            total_bases += sum(len(line) for line in fasta.splitlines() if not line.startswith(">"))
+            if total_bases * len(primers) > MAX_BASE_COMPARISONS:
+                raise WebError(
+                    f"This selection exceeds {MAX_BASE_COMPARISONS:,} sequence bases × selected primers. Use fewer sequences or primers.",
+                    "work_limit",
+                    413,
+                )
+            path.write_text(fasta, encoding="utf-8")
             subjects = engine.get_subject_ids(str(path))
             total_records += len(subjects)
             comparisons += sum(
@@ -289,11 +323,53 @@ def analyze(
                 "No sequence records match the selected primer segments. Influenza headers need segment tokens such as 01-HA|sample or 03-M|sample.",
                 "no_comparisons",
             )
+        yield {
+            "database": database,
+            "primers": primers,
+            "selected_virus": selected_virus,
+            "metadata_records": metadata_records,
+            "prepared": prepared,
+            "inputs": inputs,
+            "warnings": list(dict.fromkeys(warnings)),
+            "workload": {
+                "files": len(files),
+                "records": total_records,
+                "primers": len(primers),
+                "comparisons": comparisons,
+                "blast_calls": len(primers) * len(files),
+                "sequence_bases": total_bases,
+                "base_comparisons": total_bases * len(primers),
+                "upload_bytes": upload_bytes,
+            },
+        }
+
+
+def preflight(files, metadata, **options) -> dict:
+    """The same validation as analysis, without launching BLAST or retaining uploads."""
+    with prepare_analysis(files, metadata, **options) as prepared:
+        return {key: prepared[key] for key in ("workload", "warnings", "database")}
+
+
+def analyze(files, metadata, virus, flu_type, assay_type, assay_id, database_upload=None) -> dict:
+    started = time.monotonic()
+    with prepare_analysis(files, metadata, virus, flu_type, assay_type, assay_id, database_upload) as prepared:
+        database = prepared["database"]
+        primers = prepared["primers"]
+        inputs = prepared["inputs"]
+        warnings = prepared["warnings"]
+        total_records = prepared["workload"]["records"]
         executable, version = blast_version()
         execution = engine.BlastExecution(executable, started + ANALYSIS_SECONDS, strict_errors=True, quiet=True)
-        for path in prepared:
+        rows = []
+        for path in prepared["prepared"]:
             rows.extend(
-                engine.process_fasta_file(str(path), selected_virus, primers, metadata_records, execution=execution)
+                engine.process_fasta_file(
+                    str(path),
+                    prepared["selected_virus"],
+                    primers,
+                    prepared["metadata_records"],
+                    execution=execution,
+                )
             )
 
     # The temporary directory and uploads are gone before serializing the response.

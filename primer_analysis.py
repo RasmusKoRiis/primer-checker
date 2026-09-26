@@ -1239,6 +1239,9 @@ def validate_normalized_primer_library(primer_library: object) -> ValidationResu
             if field_name in scheme and (not isinstance(scheme[field_name], str) or not scheme[field_name].strip()):
                 result.errors.append(f"{context} field '{field_name}' must be a non-empty string.")
 
+        if scheme.get("assay_type", "pcr") not in ("pcr", "ngs"):
+            result.errors.append(f"{context} field 'assay_type' must be 'pcr' or 'ngs'.")
+
         primers = scheme.get("primers")
         if not isinstance(primers, list) or not primers:
             result.errors.append(f"{context} field 'primers' must be a non-empty list.")
@@ -1319,7 +1322,7 @@ def normalized_library_to_records(primer_library: dict) -> dict[str, list[Primer
                     database_version=database_version,
                     pool=(primer.get("pool") or "").strip(),
                     strand=(primer.get("strand") or "").strip(),
-                    assay_type="pcr",
+                    assay_type=scheme.get("assay_type", "pcr"),
                     assay_name=scheme["display_name"],
                 )
             )
