@@ -143,12 +143,28 @@ not an assurance that every input within them finishes. See
 
 This application uses lower limits: 3,000,000 combined upload bytes, 4,000,000
 wire/request and serialized-response bytes, 10 FASTA files, 200 sequence records,
-2,000 primer/record comparisons, 1,200 BLAST subprocesses, and a 240-second
-analysis deadline. Metadata is limited to 2,000 rows, 100 columns, and 500
+2,000 primer/record comparisons, 300 BLAST subprocesses, 50 million total
+sequence bases × selected primers, and a 240-second analysis deadline.
+The combined upload budget includes custom database JSON. A custom database is
+separately capped at 250,000 bytes, 500 primers, and 200 bases per primer. Metadata is limited to 2,000 rows, 100 columns, and
+500
 characters per cell. Large responses are rejected with guidance to narrow the
-analysis. Limits are validated before BLAST whenever their size is known.
+analysis. The browser checks file sizes before sending data. A debounced
+`/api/preflight` request then uses the same validation and primer selection as
+analysis, counting the batch without running BLAST. Changing inputs invalidates
+the check and disables Analyze until a new check passes. `/api/analyze` repeats
+all limits so preflight cannot be bypassed by calling the API directly.
 
-Uploads are untrusted UTF-8 nucleotide FASTA and optional CSV. ZIP, FASTQ,
+These are per-request bounds, not global rate limiting or a monthly compute
+budget. Repeated small analyses can still use the Hobby allowance. Check Vercel
+project usage before sharing widely; no distributed counter or paid service is
+introduced here. Preflight validates and discards its uploads; the browser sends
+them again when the user starts analysis.
+
+Uploads are untrusted UTF-8 nucleotide FASTA, optional CSV, and optional
+self-contained JSON primer databases. JSON uploads never resolve asset paths or
+modify the installed database; supported formats are documented in the README.
+ZIP, FASTQ,
 gapped alignments, duplicate record identifiers within a file, and reserved
 BLAST ID prefixes are rejected. Influenza needs supported segment tokens such
 as `01-HA|sample`, `03-M|sample`, or `08-NS|sample`. Duplicate sample IDs across

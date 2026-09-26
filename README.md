@@ -464,13 +464,46 @@ columns are unchanged. Web CSV text cells that could execute spreadsheet
 formulas are prefixed with an apostrophe. Raw JSON/HTML analytical values remain
 unchanged.
 
+### Your own primer database
+
+Choose **Upload JSON** to use a self-contained primer database for this analysis.
+The web accepts legacy `{organism: {primer_name: sequence}}` dictionaries and
+normalized schema `1.0` databases with inline `schemes[].primers[]` sequences.
+Existing files that reference BED/FASTA assets (`panels[]` or `viruses[]`) remain
+supported by the CLI and the installed reference library, not by public uploads.
+
+Choose **Build a database**, enter a name, organism, version, PCR/NGS type, and
+primer names/sequences (5′ → 3′), then **Create database**. Add primers with
+**Add primer**. Role, segment, pool, and influenza A subtype tags are supported.
+Influenza uses organism `Influenza-A` or `Influenza-B` and requires HA/M/NS
+segments, matching the existing engine. The validated database becomes active
+immediately. **Download database JSON** saves it for later uploads or CLI use:
+
+```bash
+python primer_checker.py --primers custom-primers.json --virus SARS-CoV-2 \
+  --fasta sample.fasta --output results.csv
+```
+
+Exported schemes use optional `assay_type: "pcr" | "ngs"`; omitted values retain
+the original PCR behavior. This supports self-contained NGS primer lists without
+external BED assets. Database uploads are limited to 250,000 bytes, 500 primers,
+and 200 bases per primer. They never replace the reference database and are not
+saved on the server. The result provenance records the uploaded filename, its
+file hash, and the fingerprint of the primer records actually used. Download
+both the custom database and results if you need to reproduce an analysis later.
+
 ### API
 
 - `GET /api/catalog`: available viruses, influenza subtypes, assays, database
   fingerprint/version, and upload limits, derived from the installed database.
 - `GET /api/health`: verifies the database and that the BLAST executable runs.
+- `POST /api/database`: multipart `database` JSON; validates an uploaded library
+  and returns its catalog without saving it or running BLAST.
+- `POST /api/preflight`: the same multipart fields as analysis; returns exact
+  record/comparison/search counts and warnings without running BLAST. Rejects
+  invalid or oversized workloads before they can start.
 - `POST /api/analyze`: multipart `files` (repeat for multiple FASTAs), optional
-  `metadata` CSV, `virus`, optional `flu_type`, `assay_type` (`pcr`, `ngs`, `all`;
+  `metadata` CSV, optional `database` JSON, `virus`, optional `flu_type`, `assay_type` (`pcr`, `ngs`, `all`;
   web default `pcr`), and optional exact `assay_id`.
 
 ```bash
@@ -495,9 +528,18 @@ deployment.** No suitability for confidential NIPH/surveillance data is claimed.
 Uploads use temporary storage and are removed after processing. Browser results
 are lost on reload unless downloaded.
 
-The first version supports up to 10 FASTAs, 3 MB combined upload data, 200
-sequence records, and 2,000 primer/record comparisons, with a 240-second
-analysis deadline and a separate response-size limit. It does not accept ZIP,
+The web supports up to 10 FASTAs, 3 MB combined FASTA/metadata/database data,
+200 sequence records, 2,000 primer/record comparisons, 300 BLAST searches, and
+50 million total sequence bases × selected primers. A 240-second analysis
+deadline and a separate response-size limit also apply. The browser blocks
+oversized files before upload, automatically checks valid-sized batches with
+preflight, and enables Analyze only for the current validated selection. The
+analysis endpoint repeats every check, including for direct API callers.
+
+These conservative per-analysis limits target small workloads on Vercel Hobby.
+They do not enforce an account-wide monthly quota or protect against repeated
+requests; watch project usage in Vercel. Larger jobs belong in the CLI.
+The web does not accept ZIP,
 FASTQ, gapped sequences, or duplicate identifiers within a FASTA. Metadata uses
 the existing column matching rules above. Large NGS/surveillance workloads may
 need fewer files/one panel at a time, or the CLI.
@@ -519,7 +561,8 @@ npm run test:e2e
 The real-BLAST equivalence tests are skipped if BLAST is unavailable; install
 BLAST for full validation. The end-to-end suite requires it, starts the Python
 API and production Next.js server, uploads the synthetic fixture, checks a
-mismatch, downloads reports, and verifies mobile layout. GitHub Actions uses
+mismatch, downloads reports, builds/downloads/re-uploads a custom database,
+checks rejection of oversized workloads, and verifies mobile layout. GitHub Actions uses
 Python 3.12, Node 22, and the packaged Linux BLAST binary. It also verifies
 BLAST execution inside Amazon Linux 2023.
 
