@@ -168,7 +168,8 @@ ZIP, FASTQ,
 gapped alignments, duplicate record identifiers within a file, and reserved
 BLAST ID prefixes are rejected. Influenza needs supported segment tokens such
 as `01-HA|sample`, `03-M|sample`, or `08-NS|sample`. Duplicate sample IDs across
-different files remain separate records unless metadata links them.
+different files remain separate records in the website. Direct API callers may
+link records with sample metadata.
 
 Input and query files use temporary directories/files, with cleanup on success
 and failures. Requests are not stored in a database or application logs. HTTP

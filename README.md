@@ -445,8 +445,8 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000). The single command starts Next.js
 and FastAPI on port 8000; Ctrl-C stops both. Upload FASTA files or choose **Use a
-synthetic example**, select a virus and assay, optionally attach metadata, and
-analyze. All files in one request use the same virus/subtype/assay selection.
+synthetic example**, select a virus and assay, and analyze. All files in one
+request use the same virus/subtype/assay selection.
 For mixed-virus folder routing, use the existing batch CLI.
 
 The UI provides primer/sample tables, sorting, primer/sample/segment/assay/
@@ -455,9 +455,12 @@ HTML downloads, and a JSON provenance download. Tables aggregate the filtered
 comparisons; no-hit results are separate from measured mismatches. The new UI
 uses descriptive counts, while the existing standalone HTML retains its
 existing risk interpretation. No new scientific risk thresholds are introduced.
+The website accepts sequence files and an optional primer database; sample
+metadata uploads and Ct/date fields are omitted from its interface. The CLI/API
+still support metadata for existing integrations.
 
 Provenance records the analysis time, application/database versions, loaded
-primer-record fingerprint, selections, input file hashes, metadata hash, BLAST
+primer-record fingerprint, selections, input file hashes, BLAST
 version and parameters, and Git revision where supplied. Web CSVs preserve the
 canonical analysis columns and append provenance columns; standalone CLI CSV
 columns are unchanged. Web CSV text cells that could execute spreadsheet
@@ -566,7 +569,8 @@ deployment.** No suitability for confidential NIPH/surveillance data is claimed.
 Uploads use temporary storage and are removed after processing. Browser results
 are lost on reload unless downloaded.
 
-The web supports up to 10 FASTAs, 3 MB combined FASTA/metadata/database data,
+The web supports up to 10 FASTAs, 3 MB combined upload data (FASTA and database
+files in the UI; also metadata for direct API callers),
 200 sequence records, 2,000 primer/record comparisons, 300 BLAST searches, and
 50 million total sequence bases × selected primers. A 240-second analysis
 deadline and a separate response-size limit also apply. The browser blocks
@@ -578,9 +582,9 @@ These conservative per-analysis limits target small workloads on Vercel Hobby.
 They do not enforce an account-wide monthly quota or protect against repeated
 requests; watch project usage in Vercel. Larger jobs belong in the CLI.
 The web does not accept ZIP,
-FASTQ, gapped sequences, or duplicate identifiers within a FASTA. Metadata uses
-the existing column matching rules above. Large NGS/surveillance workloads may
-need fewer files/one panel at a time, or the CLI.
+FASTQ, gapped sequences, or duplicate identifiers within a FASTA. Metadata sent
+directly to the API uses the existing column matching rules above. Large
+NGS/surveillance workloads may need fewer files/one panel at a time, or the CLI.
 
 ### Verification
 

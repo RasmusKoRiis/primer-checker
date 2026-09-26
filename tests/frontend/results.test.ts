@@ -69,32 +69,29 @@ describe("upload validation", () => {
     records: 200,
     comparisons: 2000,
   };
-  it("bounds the combined metadata and FASTA payload", () => {
+  it("bounds the combined FASTA payload", () => {
     expect(
       validateFiles(
-        [{ name: "a.fasta", size: 2_000_000 }],
-        { name: "m.csv", size: 1_000_001 },
+        [
+          { name: "a.fasta", size: 2_000_000 },
+          { name: "b.fasta", size: 1_000_001 },
+        ],
         limits,
       ),
     ).toMatch(/3 MB/);
-    expect(
-      validateFiles([{ name: "a.fasta", size: 100 }], null, limits),
-    ).toBeNull();
+    expect(validateFiles([{ name: "a.fasta", size: 100 }], limits)).toBeNull();
   });
   it("rejects unsupported, empty, and duplicate files", () => {
-    expect(
-      validateFiles([{ name: "a.fastq", size: 100 }], null, limits),
-    ).toMatch(/FASTQ/);
-    expect(validateFiles([{ name: "a.fa", size: 0 }], null, limits)).toMatch(
-      /empty/,
+    expect(validateFiles([{ name: "a.fastq", size: 100 }], limits)).toMatch(
+      /FASTQ/,
     );
+    expect(validateFiles([{ name: "a.fa", size: 0 }], limits)).toMatch(/empty/);
     expect(
       validateFiles(
         [
           { name: "a.fa", size: 5 },
           { name: "a.fa", size: 6 },
         ],
-        null,
         limits,
       ),
     ).toMatch(/distinct/);

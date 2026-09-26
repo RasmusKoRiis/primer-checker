@@ -77,7 +77,6 @@ export default function Home() {
   } | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [metadata, setMetadata] = useState<File | null>(null);
   const [virus, setVirus] = useState("SARS-CoV-2");
   const [subtype, setSubtype] = useState("H3");
   const [assayType, setAssayType] = useState("pcr");
@@ -134,22 +133,18 @@ export default function Home() {
         (assayType === "all" || a.type === assayType),
     ) || [];
   const limits = catalog?.limits || fallbackLimits;
-  const bytes = files.reduce(
-    (n, f) => n + f.size,
-    (metadata?.size || 0) + (database?.size || 0),
-  );
-  const uploadProblem = validateFiles(files, metadata, limits, database);
+  const bytes = files.reduce((n, f) => n + f.size, database?.size || 0);
+  const uploadProblem = validateFiles(files, limits, database);
   const uploadData = useMemo(() => {
     const data = new FormData();
     files.forEach((file) => data.append("files", file));
-    if (metadata) data.append("metadata", metadata);
     if (database) data.append("database", database);
     data.append("virus", virus);
     data.append("assay_type", assayType);
     if (virus === "influenza") data.append("flu_type", subtype);
     if (assay) data.append("assay_id", assay);
     return data;
-  }, [files, metadata, database, virus, assayType, subtype, assay]);
+  }, [files, database, virus, assayType, subtype, assay]);
   const checked = preflight?.request === uploadData ? preflight : null;
   const readyToAnalyze =
     !!catalog && !!files.length && !uploadProblem && !!checked?.workload;
@@ -211,7 +206,7 @@ export default function Home() {
 
   function addFiles(incoming: File[]) {
     const next = [...files, ...incoming];
-    const problem = validateFiles(next, metadata, limits, database);
+    const problem = validateFiles(next, limits, database);
     if (problem) {
       setError(problem);
       return;
@@ -235,7 +230,6 @@ export default function Home() {
       setVirus("SARS-CoV-2");
       setAssayType("pcr");
       setAssay("");
-      setMetadata(null);
       setError("");
     } catch {
       setError("The example could not be loaded. Try uploading a FASTA file.");
@@ -243,7 +237,7 @@ export default function Home() {
   }
   async function analyze(event: React.FormEvent) {
     event.preventDefault();
-    const problem = validateFiles(files, metadata, limits, database);
+    const problem = validateFiles(files, limits, database);
     if (problem || !files.length) {
       setError(problem || "Choose at least one FASTA file.");
       return;
@@ -503,61 +497,6 @@ export default function Home() {
                     </a>
                   </div>
                   <FastaFormatHelp />
-                  <div className="metadata-section">
-                    <div>
-                      <h3>
-                        {t("Sample metadata")}{" "}
-                        <span className="optional">{t("Optional")}</span>
-                      </h3>
-                      <p>
-                        {t(
-                          "Attach a CSV with SampleID, Sample_Date, and Ct values.",
-                        )}
-                      </p>
-                    </div>
-                    <label
-                      className="button secondary metadata-label"
-                      htmlFor="metadata-upload"
-                    >
-                      <Plus size={14} />
-                      {t("Add CSV")}
-                      <input
-                        id="metadata-upload"
-                        type="file"
-                        accept=".csv"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const next = e.target.files?.[0] || null;
-                          const problem = validateFiles(
-                            files,
-                            next,
-                            limits,
-                            database,
-                          );
-                          if (problem) setError(problem);
-                          else {
-                            setMetadata(next);
-                            setError("");
-                          }
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                  {metadata && (
-                    <div className="metadata-file">
-                      <FileText size={15} />
-                      <span>{metadata.name}</span>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={t("Remove metadata")}
-                        onClick={() => setMetadata(null)}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
                 </section>
                 <section
                   className="card settings-card"

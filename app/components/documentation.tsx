@@ -91,7 +91,7 @@ export default function Documentation() {
           <dt>{t("Summary cards")}</dt>
           <dd>
             {t(
-              "The top cards describe the complete analysis and stay unchanged when table filters are applied. Files and sequence records count the uploaded inputs. Sample identifiers use matched metadata when available; otherwise each file/sequence identifier is separate. Successful hits exclude no-hit comparisons. Hits with mismatches counts hit comparisons with at least one mismatch.",
+              "The top cards describe the complete analysis and stay unchanged when table filters are applied. Files and sequence records count the uploaded inputs. Each combination of filename and sequence ID is counted separately. Successful hits exclude no-hit comparisons. Hits with mismatches counts hit comparisons with at least one mismatch.",
             )}
           </dd>
           <dt>{t("By primer")}</dt>
@@ -103,7 +103,7 @@ export default function Documentation() {
           <dt>{t("By sample")}</dt>
           <dd>
             {t(
-              "Each row is one primer checked against one relevant sequence. Identity and mismatch counts are shown only for hits. Positions are numbered from the primer’s 5′ end. A change such as 9:T>A means primer base T corresponds to sequence base A at position 9. Ct and date are attached when sample metadata can be matched; they are not calculated from the sequence.",
+              "Each row is one primer checked against one relevant sequence. Identity and mismatch counts are shown only for hits. Positions are numbered from the primer’s 5′ end. A change such as 9:T>A means primer base T corresponds to sequence base A at position 9.",
             )}
           </dd>
           <dt>{t("Filters and downloads")}</dt>

@@ -313,8 +313,6 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                       heading("Identity", "Percent_Identity"),
                       heading("Mismatches", "Mismatches"),
                       heading("Positions", "Mismatch_Positions"),
-                      heading("Ct", "Ct_Value"),
-                      heading("Date", "Sample_Date"),
                       <th key="inspect">{t("Alignment")}</th>,
                     ]}
               </tr>
@@ -387,8 +385,6 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                         </span>
                       </td>
                       <td className="mono">{r.Mismatch_Positions || "—"}</td>
-                      <td title={r.Ct_Source}>{r.Ct_Value || "—"}</td>
-                      <td>{r.Sample_Date || "—"}</td>
                       <td>
                         <button
                           className="table-link"
@@ -451,7 +447,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
       </div>
       <p className="interpretation-note">
         {t(
-          "Tables summarize the filtered primer/sequence comparisons. “Affected” means at least one mismatch; no-hit results are shown separately. These are descriptive findings, not predictions of assay performance. Sample identifiers use matched metadata when available; otherwise each FASTA record is counted separately.",
+          "Tables summarize the filtered primer/sequence comparisons. “Affected” means at least one mismatch; no-hit results are shown separately. These are descriptive findings, not predictions of assay performance. Each FASTA record is counted separately, using its filename and sequence ID.",
         )}
       </p>
       <details className="provenance">
@@ -569,11 +565,6 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                   </dd>
                   <dt>{t("Identity")}</dt>
                   <dd>{Number(selected.Percent_Identity).toFixed(2)}%</dd>
-                  <dt>{t("Ct / source")}</dt>
-                  <dd>
-                    {selected.Ct_Value || "—"}{" "}
-                    {selected.Ct_Source && `(${selected.Ct_Source})`}
-                  </dd>
                 </dl>
               </>
             ) : (

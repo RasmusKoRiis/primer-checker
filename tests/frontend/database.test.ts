@@ -48,7 +48,6 @@ it("includes the custom database in the combined browser upload limit", () => {
   expect(
     validateFiles(
       [{ name: "sample.fa", size: 2_900_000 }],
-      null,
       { files: 10, upload_bytes: 3_000_000, records: 200, comparisons: 2000 },
       { name: "custom.json", size: 100_001 },
     ),

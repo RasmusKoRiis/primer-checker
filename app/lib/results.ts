@@ -49,9 +49,6 @@ export interface ResultRow {
   Subject_Alignment: string;
   Subject_Start: number | string;
   Subject_End: number | string;
-  Sample_Date: string;
-  Ct_Value: string;
-  Ct_Source: string;
 }
 export interface Analysis {
   rows: ResultRow[];
@@ -160,7 +157,6 @@ export function aggregatePrimers(rows: ResultRow[]) {
 }
 export function validateFiles(
   files: { name: string; size: number }[],
-  metadata: { name: string; size: number } | null,
   limits: Catalog["limits"],
   database: { name: string; size: number } | null = null,
 ): string | null {
@@ -170,13 +166,9 @@ export function validateFiles(
     return "Choose FASTA files (.fasta, .fa, .fas, or .fna). FASTQ and ZIP are not supported.";
   if (files.some((f) => f.size === 0))
     return "One of the FASTA files is empty.";
-  if (metadata && !/\.csv$/i.test(metadata.name))
-    return "Metadata must be a CSV file.";
   if (
-    files.reduce(
-      (n, f) => n + f.size,
-      (metadata?.size || 0) + (database?.size || 0),
-    ) > limits.upload_bytes
+    files.reduce((n, f) => n + f.size, database?.size || 0) >
+    limits.upload_bytes
   )
     return "Combined uploads exceed 3 MB. Split the analysis into smaller batches.";
   if (new Set(files.map((f) => f.name)).size !== files.length)

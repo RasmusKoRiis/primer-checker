@@ -443,50 +443,6 @@ button svg {
 .text-button:hover {
   text-decoration: underline;
 }
-.metadata-section {
-  border-top: 1px solid var(--line);
-  padding-top: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.metadata-section h3 {
-  font-size: 12px;
-}
-.optional {
-  margin-left: 7px;
-  font-weight: 400;
-  color: #819098;
-  font-size: 10px;
-}
-.metadata-section p {
-  font-size: 11px;
-  margin-top: 5px;
-}
-.metadata-label {
-  font-size: 11px;
-  cursor: pointer;
-  position: relative;
-}
-.metadata-label:focus-within {
-  outline: 2px solid var(--teal);
-  outline-offset: 3px;
-}
-.metadata-file {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: var(--teal);
-  font-size: 12px;
-}
-.metadata-file span {
-  overflow-wrap: anywhere;
-}
-.metadata-file button {
-  margin-left: auto;
-}
 .settings-card {
   display: flex;
   flex-direction: column;
@@ -1148,12 +1104,6 @@ tbody tr:hover {
   .label-tag {
     display: none;
   }
-  .metadata-section {
-    align-items: flex-start;
-  }
-  .metadata-section p {
-    max-width: 200px;
-  }
   .run-bar {
     align-items: flex-start;
   }
@@ -1265,9 +1215,6 @@ tbody tr:hover {
   .dropzone {
     min-height: 220px;
   }
-  .metadata-section p {
-    max-width: none;
-  }
   .settings-card {
     padding-bottom: 19px;
   }
@@ -1374,9 +1321,6 @@ tbody tr:hover {
   }
   .run-action > span {
     font-size: 10px;
-  }
-  .metadata-section p {
-    max-width: 200px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
