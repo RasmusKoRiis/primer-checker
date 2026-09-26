@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from pathlib import Path
 
 # --- Ambiguous Nucleotide Handling ---
 AMBIGUITY_CODES = {
@@ -67,6 +69,37 @@ CSV_FIELDNAMES = [
     "Ct_Source",
 ]
 BLAST_MAX_TARGET_SEQS = "5000"
+
+
+class BlastError(RuntimeError):
+    """BLAST could not complete; distinct from a successful search with no hits."""
+
+
+class BlastUnavailableError(BlastError):
+    pass
+
+
+class AnalysisTimeoutError(BlastError):
+    pass
+
+
+@dataclass(frozen=True)
+class BlastExecution:
+    """Optional web execution policy; does not change alignment parameters."""
+    executable: str | None = None
+    deadline: float | None = None
+    strict_errors: bool = False
+    quiet: bool = False
+
+
+def resolve_blastn() -> str:
+    configured = os.environ.get("BLASTN_PATH")
+    bundled = Path(__file__).resolve().parent / "bin" / "blastn"
+    candidate = configured or (str(bundled) if bundled.is_file() else "blastn")
+    resolved = shutil.which(candidate)
+    if not resolved:
+        raise BlastUnavailableError("BLAST executable unavailable. Install BLAST+ or configure BLASTN_PATH.")
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -570,6 +603,7 @@ def build_metadata_matches(
     subject_ids: list[str],
     metadata_records: list[MetadataRecord],
     fasta_file: str,
+    quiet: bool = False,
 ) -> dict[str, MetadataRecord]:
     if not metadata_records:
         return {}
@@ -583,7 +617,7 @@ def build_metadata_matches(
         elif status == "ambiguous":
             ambiguous.append(subject_id)
 
-    if ambiguous:
+    if ambiguous and not quiet:
         preview = ", ".join(ambiguous[:5])
         suffix = "..." if len(ambiguous) > 5 else ""
         print(
@@ -1523,8 +1557,10 @@ def get_subject_ids(fasta_file: str) -> list:
 
 
 def ensure_blastn_available():
-    if shutil.which("blastn") is None:
-        sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+    try:
+        return resolve_blastn()
+    except BlastUnavailableError as exc:
+        sys.exit(f"Error: {exc}")
 
 
 def run_blastn(
@@ -1532,6 +1568,7 @@ def run_blastn(
     primer_seq: str,
     subject_file: str,
     subject_sequences: dict[str, str] | None = None,
+    execution: BlastExecution | None = None,
 ) -> dict:
     """
     Run BLASTn with the primer (query) against the subject FASTA file.
@@ -1542,13 +1579,25 @@ def run_blastn(
     Percent identity is recalculated over the full primer length.
     Returns a dictionary mapping each subject sequence ID (sseqid) to the best alignment.
     """
+    execution = execution or BlastExecution()
+    try:
+        executable = execution.executable or resolve_blastn()
+    except BlastUnavailableError:
+        if execution.strict_errors:
+            raise
+        sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+    timeout = None
+    if execution.deadline is not None:
+        timeout = execution.deadline - time.monotonic()
+        if timeout <= 0:
+            raise AnalysisTimeoutError("Analysis timed out. Try fewer files or select a single assay.")
     query_filename = ""
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".fasta") as tmp_query:
         tmp_query.write(f">{primer_name}\n{primer_seq}\n")
         query_filename = tmp_query.name
 
     blast_command = [
-        "blastn",
+        executable,
         "-query", query_filename,
         "-subject", subject_file,
         "-reward", "2",
@@ -1566,15 +1615,26 @@ def run_blastn(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                check=False
+                check=False,
+                timeout=timeout,
             )
         except FileNotFoundError:
+            if execution.strict_errors:
+                raise BlastUnavailableError("BLAST executable unavailable.") from None
             sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+        except subprocess.TimeoutExpired:
+            raise AnalysisTimeoutError("Analysis timed out. Try fewer files or select a single assay.") from None
+        except OSError:
+            if execution.strict_errors:
+                raise BlastUnavailableError("BLAST executable could not start.") from None
+            raise
     finally:
         if query_filename and os.path.exists(query_filename):
             os.remove(query_filename)
 
     if result.returncode != 0:
+        if execution.strict_errors:
+            raise BlastError("BLAST analysis failed. Check the input or try a smaller analysis.")
         print(f"BLASTn error for primer '{primer_name}' against {subject_file}:\n{result.stderr}", file=sys.stderr)
         return {}
 
@@ -1648,7 +1708,7 @@ def run_blastn(
                 hits_by_subject[sseqid] = current_hit
     return hits_by_subject
 
-def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, virus_type: str, fasta_file: str) -> list[str]:
+def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, virus_type: str, fasta_file: str, quiet: bool = False) -> list[str]:
     if not virus_type.upper().startswith("INFLUENZA") or not primer.segment:
         return subject_ids
 
@@ -1661,7 +1721,7 @@ def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, 
         elif not subject_segment:
             unparseable_count += 1
 
-    if unparseable_count:
+    if unparseable_count and not quiet:
         print(
             f"Warning: {unparseable_count} subject header(s) in {fasta_file} had no parseable influenza segment "
             f"while filtering primer '{primer.name}' for segment {primer.segment}.",
@@ -1675,6 +1735,8 @@ def process_fasta_file(
     virus_type: str,
     primers: list[PrimerRecord],
     metadata_records: list[MetadataRecord] | None = None,
+    *,
+    execution: BlastExecution | None = None,
 ) -> list:
     """
     For a given FASTA file and virus type, run BLASTn for each primer.
@@ -1682,6 +1744,7 @@ def process_fasta_file(
     For Influenza, if a primer record has an intended segment, only subject
     sequences with that segment are reported.
     """
+    execution = execution or BlastExecution()
     results = []
     if not primers:
         print(f"No primer information available for virus type '{virus_type}'.", file=sys.stderr)
@@ -1689,14 +1752,15 @@ def process_fasta_file(
 
     subject_sequences = read_fasta_sequences(fasta_file)
     subject_ids = get_subject_ids(fasta_file)
-    metadata_matches = build_metadata_matches(subject_ids, metadata_records or [], fasta_file)
+    metadata_matches = build_metadata_matches(subject_ids, metadata_records or [], fasta_file, quiet=execution.quiet)
 
     for primer in primers:
         primer_seq = primer.sequence.upper()
-        print(f"Running BLASTn for primer '{primer.name}' on file '{fasta_file}' ...")
+        if not execution.quiet:
+            print(f"Running BLASTn for primer '{primer.name}' on file '{fasta_file}' ...")
 
-        filtered_subject_ids = filter_subject_ids_for_primer(subject_ids, primer, virus_type, fasta_file)
-        hits_by_subject = run_blastn(primer.name, primer_seq, fasta_file, subject_sequences=subject_sequences)
+        filtered_subject_ids = filter_subject_ids_for_primer(subject_ids, primer, virus_type, fasta_file, quiet=execution.quiet)
+        hits_by_subject = run_blastn(primer.name, primer_seq, fasta_file, subject_sequences=subject_sequences, execution=execution)
 
         for subject in filtered_subject_ids:
             subject_segment = get_segment(subject)
@@ -1766,6 +1830,13 @@ def process_fasta_file(
             results.append(result_row)
     return results
 
+def write_csv_rows(results: list, stream):
+    """Serialize the canonical CSV columns to a file or in-memory text stream."""
+    writer = csv.DictWriter(stream, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(results)
+
+
 def write_csv_report(results: list, output_file: str):
     """Write the results to a CSV file."""
     if not results:
@@ -1774,10 +1845,7 @@ def write_csv_report(results: list, output_file: str):
 
     try:
         with open(output_file, "w", newline="") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
-            writer.writeheader()
-            for row in results:
-                writer.writerow(row)
+            write_csv_rows(results, csvfile)
         print(f"Report successfully written to {output_file}")
     except Exception as e:
         print(f"Error writing CSV file: {e}", file=sys.stderr)
