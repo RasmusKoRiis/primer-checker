@@ -1,7 +1,20 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpDown, Check, ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react";
-import { aggregatePrimers, download, emptyFilters, filterRows } from "../lib/results";
+import {
+  ArrowDownToLine,
+  ArrowUpDown,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
+import {
+  aggregatePrimers,
+  download,
+  emptyFilters,
+  filterRows,
+} from "../lib/results";
 import type { Analysis, Filters, ResultRow } from "../lib/results";
 
 export default function Results({ analysis }: { analysis: Analysis }) {
@@ -11,55 +24,588 @@ export default function Results({ analysis }: { analysis: Analysis }) {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<ResultRow | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
-  const filtered = useMemo(() => filterRows(analysis.rows, filters), [analysis.rows, filters]);
+  const filtered = useMemo(
+    () => filterRows(analysis.rows, filters),
+    [analysis.rows, filters],
+  );
   const primers = useMemo(() => aggregatePrimers(filtered), [filtered]);
   const displayRows = tab === "primers" ? primers : filtered;
   const ordered = [...displayRows].sort((a, b) => {
     const av = (a as Record<string, string | number>)[sort.column] ?? "";
     const bv = (b as Record<string, string | number>)[sort.column] ?? "";
-    return (typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true })) * sort.direction;
+    return (
+      (typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true })) *
+      sort.direction
+    );
   });
   const pages = Math.max(1, Math.ceil(ordered.length / 25));
   const visiblePage = Math.min(page, pages - 1);
   const visible = ordered.slice(visiblePage * 25, (visiblePage + 1) * 25);
   const s = analysis.summary;
   const m = analysis.manifest;
-  const segments = [...new Set(analysis.rows.map(r => r.Primer_Segment || r.Subject_Segment).filter(Boolean))];
-  const assays = [...new Map(analysis.rows.map(r => [r.Assay_ID, r.Assay_Name || r.Assay_ID])).entries()];
-  const mismatchCounts = [...new Set(analysis.rows.filter(r => r.Hit_Status === "hit").map(r => Number(r.Mismatches)))].sort((a,b) => a-b);
-  function update(key: keyof Filters, value: string) { setFilters({ ...filters, [key]: value }); setPage(0); }
-  function changeTab(value: string) { setTab(value); setPage(0); setSort({ column: value === "primers" ? "primer" : "Subject_Sequence_ID", direction: 1 }); }
-  useEffect(() => { if (selected) dialog.current?.showModal(); }, [selected]);
-  function heading(label: string, column: string) {
-    return <th key={column} aria-sort={sort.column === column ? sort.direction === 1 ? "ascending" : "descending" : "none"}><button onClick={() => setSort({ column, direction: sort.column === column ? -sort.direction : 1 })}>{label}<ArrowUpDown size={11} /></button></th>;
+  const segments = [
+    ...new Set(
+      analysis.rows
+        .map((r) => r.Primer_Segment || r.Subject_Segment)
+        .filter(Boolean),
+    ),
+  ];
+  const assays = [
+    ...new Map(
+      analysis.rows.map((r) => [r.Assay_ID, r.Assay_Name || r.Assay_ID]),
+    ).entries(),
+  ];
+  const mismatchCounts = [
+    ...new Set(
+      analysis.rows
+        .filter((r) => r.Hit_Status === "hit")
+        .map((r) => Number(r.Mismatches)),
+    ),
+  ].sort((a, b) => a - b);
+  function update(key: keyof Filters, value: string) {
+    setFilters({ ...filters, [key]: value });
+    setPage(0);
   }
-  return <section className="results-section" aria-labelledby="results-title">
-    <div className="results-heading"><div><div className="eyebrow"><Check size={12} /> ANALYSIS COMPLETE</div><h2 id="results-title">Compatibility results</h2><p>{m.selection.virus}{m.selection.flu_type ? ` · ${m.selection.flu_type}` : ""} <span>·</span> {m.selection.assay_type.toUpperCase()} <span>·</span> {new Date(m.analysis_utc).toLocaleString()}</p></div><div className="download-group"><button className="button secondary" onClick={() => download(analysis.downloads.csv, "primer-results.csv", "text/csv;charset=utf-8")}><ArrowDownToLine size={14} /> CSV</button><button className="button secondary" onClick={() => download(analysis.downloads.html, "primer-report.html", "text/html;charset=utf-8")}><ArrowDownToLine size={14} /> HTML report</button></div></div>
-    {analysis.warnings.map(w => <div className="warning-banner" key={w}>{w}</div>)}
-    <div className="stats-grid"><Stat label="Files / sequence records" value={`${s.files} / ${s.sequence_records}`} note={`${s.samples} analyzed sample identifiers`} /><Stat label="Primers evaluated" value={s.primers} note={`${s.comparisons.toLocaleString()} comparisons`} /><Stat label="Successful hits" value={s.hits} note={`${s.comparisons - s.hits} without a hit`} /><Stat label="Hits with mismatches" value={s.mismatch_comparisons} note={`${s.samples_affected} sample identifiers affected`} accented /></div>
-    <div className="results-card card"><div className="table-toolbar"><div className="tabs" role="tablist" aria-label="Result views"><button role="tab" id="primers-tab" aria-controls="result-table" aria-selected={tab === "primers"} onClick={() => changeTab("primers")}>By primer <span>{primers.length}</span></button><button role="tab" id="samples-tab" aria-controls="result-table" aria-selected={tab === "samples"} onClick={() => changeTab("samples")}>By sample <span>{filtered.length}</span></button></div><span className="filter-label"><SlidersHorizontal size={14} /> Filter results</span></div>
-      <div className="filters"><label>Primer<input value={filters.primer} placeholder="Search primer…" onChange={e => update("primer", e.target.value)} /></label><label>Sample<input value={filters.sample} placeholder="Search sample…" onChange={e => update("sample", e.target.value)} /></label><label>Segment<select value={filters.segment} onChange={e => update("segment", e.target.value)}><option value="">All segments</option>{segments.map(x => <option key={x}>{x}</option>)}</select></label><label>Assay<select value={filters.assay} onChange={e => update("assay", e.target.value)}><option value="">All assays</option>{assays.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>Mismatches<select value={filters.mismatches} onChange={e => update("mismatches", e.target.value)}><option value="">Any count</option><option value="any">At least one</option>{mismatchCounts.map(x => <option key={x} value={x}>{x}</option>)}</select></label><label>Hit status<select value={filters.status} onChange={e => update("status", e.target.value)}><option value="">All results</option><option value="hit">Hit</option><option value="no_hit">No hit</option></select></label></div>
-      <div role="tabpanel" id="result-table" aria-labelledby={`${tab}-tab`} className="table-scroll"><table><caption className="sr-only">Primer compatibility results. Select a sample result to inspect its alignment.</caption><thead><tr>{tab === "primers" ? [heading("Primer", "primer"), heading("Assay", "assay"), heading("Segment / pool", "segment"), heading("Tested", "tested"), heading("Perfect", "perfect"), heading("Mismatches", "affected"), heading("No hit", "noHit"), heading("Max. mismatches", "maximum"), heading("Affected", "percent")] : [heading("Sample / file", "Subject_Sequence_ID"), heading("Primer", "Primer_Name"), heading("Segment", "Subject_Segment"), heading("Identity", "Percent_Identity"), heading("Mismatches", "Mismatches"), heading("Positions", "Mismatch_Positions"), heading("Ct", "Ct_Value"), heading("Date", "Sample_Date"), <th key="inspect">Alignment</th>]}</tr></thead>
-      <tbody>{tab === "primers" ? (visible as ReturnType<typeof aggregatePrimers>).map(p => <tr key={p.key}><td><button className="table-link" onClick={() => { setFilters({ ...filters, primer: p.primer }); changeTab("samples"); }}>{p.primer}</button></td><td className="muted">{p.assay || "—"}</td><td>{p.segment || "—"}<span className="cell-secondary">{p.pool}</span></td><td>{p.tested}</td><td><span className="match-count">{p.perfect}</span></td><td><span className={p.affected ? "mismatch-count" : "muted"}>{p.affected}</span></td><td>{p.noHit}</td><td>{p.noHit === p.tested ? "—" : p.maximum}</td><td>{p.percent.toFixed(1)}%</td></tr>) : (visible as ResultRow[]).map((r, i) => <tr key={`${r.Fasta_File}-${r.Subject_Sequence_ID}-${r.Assay_ID}-${r.Primer_Name}-${i}`}><td className="mono">{r.Subject_Sequence_ID}<span className="cell-secondary">{r.Fasta_File}</span></td><td>{r.Primer_Name}<span className="cell-secondary">{r.Assay_Name}</span></td><td>{r.Subject_Segment || r.Primer_Segment || "—"}</td><td>{r.Hit_Status === "hit" ? `${Number(r.Percent_Identity).toFixed(1)}%` : <span className="no-hit">No hit</span>}</td><td><span className={Number(r.Mismatches) > 0 ? "mismatch-count" : "match-count"}>{r.Hit_Status === "hit" ? r.Mismatches : "—"}</span></td><td className="mono">{r.Mismatch_Positions || "—"}</td><td title={r.Ct_Source}>{r.Ct_Value || "—"}</td><td>{r.Sample_Date || "—"}</td><td><button className="table-link" onClick={() => setSelected(r)}>Inspect <ChevronRight size={13} /></button></td></tr>)}</tbody></table>
-      {!visible.length && <div className="empty-table"><h3>No results match these filters</h3><button className="text-button" onClick={() => { setFilters(emptyFilters); setPage(0); }}>Clear filters</button></div>}</div>
-      <div className="table-pagination"><span>{ordered.length ? visiblePage * 25 + 1 : 0}–{Math.min((visiblePage + 1) * 25, ordered.length)} of {ordered.length} {tab === "primers" ? "primers" : "comparisons"}</span><div><button className="icon-button" aria-label="Previous page" disabled={!visiblePage} onClick={() => setPage(visiblePage - 1)}><ChevronLeft size={17} /></button><span>Page {visiblePage + 1} of {pages}</span><button className="icon-button" aria-label="Next page" disabled={visiblePage >= pages - 1} onClick={() => setPage(visiblePage + 1)}><ChevronRight size={17} /></button></div></div>
-    </div>
-    <p className="interpretation-note">Counts describe primer/sequence comparisons. “Affected” means at least one mismatch; no-hit results are shown separately. These are descriptive findings, not predictions of assay performance. Sample identifiers use matched metadata when available; otherwise each FASTA record is counted separately.</p>
-    <details className="provenance"><summary>Analysis provenance <span>Database {m.database.version} · App {m.application_version} · {m.blast.version}</span></summary><dl><dt>Selection</dt><dd>{m.selection.virus} / {m.selection.flu_type || "—"} / {m.selection.assay_type} / {m.selection.assay_id || "all matching assays"}</dd><dt>Database SHA-256</dt><dd className="mono">{m.database.sha256}</dd><dt>Git commit</dt><dd className="mono">{m.git_commit}</dd><dt>Input files</dt><dd>{m.files.map(f => `${f.filename} (${f.records} records)`).join(", ")}</dd></dl><button className="button secondary" onClick={() => download(analysis.downloads.manifest, "analysis-provenance.json", "application/json")}><ArrowDownToLine size={14} /> Download provenance</button></details>
-    <dialog ref={dialog} className="alignment-dialog" onClose={() => setSelected(null)} onClick={e => { if (e.target === dialog.current) dialog.current?.close(); }}>
-      {selected && <><div className="dialog-heading"><div><div className="eyebrow">ALIGNMENT INSPECTOR</div><h2>{selected.Primer_Name}</h2><p>{selected.Subject_Sequence_ID}</p></div><button className="icon-button" aria-label="Close alignment" onClick={() => dialog.current?.close()}><X size={19} /></button></div><div className="alignment-meta"><span>{selected.Virus_Type}</span><span>{selected.Assay_Name}</span><span>{selected.Hit_Status === "hit" ? `${Number(selected.Subject_End) >= Number(selected.Subject_Start) ? "Forward" : "Reverse"} strand · ${selected.Subject_Start}–${selected.Subject_End}` : "No BLAST hit"}</span></div><p className="sequence-label">Original primer sequence</p><div className="original-sequence mono">{selected.Primer_Sequence}</div>{selected.Hit_Status === "hit" ? <><Alignment row={selected} /><p className="alignment-legend"><span /> Highlighted bases are mismatches reported by the analysis engine. Positions are relative to the primer, starting at 1.</p><dl className="alignment-details"><dt>Mismatch positions</dt><dd>{selected.Mismatch_Positions || "None"}</dd><dt>Substitutions</dt><dd className="mono">{selected.Mismatch_Details || "None"}</dd><dt>Identity</dt><dd>{Number(selected.Percent_Identity).toFixed(2)}%</dd><dt>Ct / source</dt><dd>{selected.Ct_Value || "—"} {selected.Ct_Source && `(${selected.Ct_Source})`}</dd></dl></> : <p className="warning-banner">BLAST did not return a hit for this primer/sequence pair. There is no alignment to inspect; this is separate from a measured mismatch count.</p>}</>}
-    </dialog>
-  </section>;
+  function changeTab(value: string) {
+    setTab(value);
+    setPage(0);
+    setSort({
+      column: value === "primers" ? "primer" : "Subject_Sequence_ID",
+      direction: 1,
+    });
+  }
+  useEffect(() => {
+    if (selected) dialog.current?.showModal();
+  }, [selected]);
+  function heading(label: string, column: string) {
+    return (
+      <th
+        key={column}
+        aria-sort={
+          sort.column === column
+            ? sort.direction === 1
+              ? "ascending"
+              : "descending"
+            : "none"
+        }
+      >
+        <button
+          onClick={() =>
+            setSort({
+              column,
+              direction: sort.column === column ? -sort.direction : 1,
+            })
+          }
+        >
+          {label}
+          <ArrowUpDown size={11} />
+        </button>
+      </th>
+    );
+  }
+  return (
+    <section className="results-section" aria-labelledby="results-title">
+      <div className="results-heading">
+        <div>
+          <div className="eyebrow">
+            <Check size={12} /> ANALYSIS COMPLETE
+          </div>
+          <h2 id="results-title">Compatibility results</h2>
+          <p>
+            {m.selection.virus}
+            {m.selection.flu_type ? ` · ${m.selection.flu_type}` : ""}{" "}
+            <span>·</span> {m.selection.assay_type.toUpperCase()} <span>·</span>{" "}
+            {new Date(m.analysis_utc).toLocaleString()}
+          </p>
+        </div>
+        <div className="download-group">
+          <button
+            className="button secondary"
+            onClick={() =>
+              download(
+                analysis.downloads.csv,
+                "primer-results.csv",
+                "text/csv;charset=utf-8",
+              )
+            }
+          >
+            <ArrowDownToLine size={14} /> CSV
+          </button>
+          <button
+            className="button secondary"
+            onClick={() =>
+              download(
+                analysis.downloads.html,
+                "primer-report.html",
+                "text/html;charset=utf-8",
+              )
+            }
+          >
+            <ArrowDownToLine size={14} /> HTML report
+          </button>
+        </div>
+      </div>
+      {analysis.warnings.map((w) => (
+        <div className="warning-banner" key={w}>
+          {w}
+        </div>
+      ))}
+      <div className="stats-grid">
+        <Stat
+          label="Files / sequence records"
+          value={`${s.files} / ${s.sequence_records}`}
+          note={`${s.samples} analyzed sample identifiers`}
+        />
+        <Stat
+          label="Primers evaluated"
+          value={s.primers}
+          note={`${s.comparisons.toLocaleString()} comparisons`}
+        />
+        <Stat
+          label="Successful hits"
+          value={s.hits}
+          note={`${s.comparisons - s.hits} without a hit`}
+        />
+        <Stat
+          label="Hits with mismatches"
+          value={s.mismatch_comparisons}
+          note={`${s.samples_affected} sample identifiers affected`}
+          accented
+        />
+      </div>
+      <div className="results-card card">
+        <div className="table-toolbar">
+          <div className="tabs" role="tablist" aria-label="Result views">
+            <button
+              role="tab"
+              id="primers-tab"
+              aria-controls="result-table"
+              aria-selected={tab === "primers"}
+              onClick={() => changeTab("primers")}
+            >
+              By primer <span>{primers.length}</span>
+            </button>
+            <button
+              role="tab"
+              id="samples-tab"
+              aria-controls="result-table"
+              aria-selected={tab === "samples"}
+              onClick={() => changeTab("samples")}
+            >
+              By sample <span>{filtered.length}</span>
+            </button>
+          </div>
+          <span className="filter-label">
+            <SlidersHorizontal size={14} /> Filter results
+          </span>
+        </div>
+        <div className="filters">
+          <label>
+            Primer
+            <input
+              value={filters.primer}
+              placeholder="Search primer…"
+              onChange={(e) => update("primer", e.target.value)}
+            />
+          </label>
+          <label>
+            Sample
+            <input
+              value={filters.sample}
+              placeholder="Search sample…"
+              onChange={(e) => update("sample", e.target.value)}
+            />
+          </label>
+          <label>
+            Segment
+            <select
+              value={filters.segment}
+              onChange={(e) => update("segment", e.target.value)}
+            >
+              <option value="">All segments</option>
+              {segments.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Assay
+            <select
+              value={filters.assay}
+              onChange={(e) => update("assay", e.target.value)}
+            >
+              <option value="">All assays</option>
+              {assays.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Mismatches
+            <select
+              value={filters.mismatches}
+              onChange={(e) => update("mismatches", e.target.value)}
+            >
+              <option value="">Any count</option>
+              <option value="any">At least one</option>
+              {mismatchCounts.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Hit status
+            <select
+              value={filters.status}
+              onChange={(e) => update("status", e.target.value)}
+            >
+              <option value="">All results</option>
+              <option value="hit">Hit</option>
+              <option value="no_hit">No hit</option>
+            </select>
+          </label>
+        </div>
+        <div
+          role="tabpanel"
+          id="result-table"
+          aria-labelledby={`${tab}-tab`}
+          className="table-scroll"
+        >
+          <table>
+            <caption className="sr-only">
+              Primer compatibility results. Select a sample result to inspect
+              its alignment.
+            </caption>
+            <thead>
+              <tr>
+                {tab === "primers"
+                  ? [
+                      heading("Primer", "primer"),
+                      heading("Assay", "assay"),
+                      heading("Segment / pool", "segment"),
+                      heading("Tested", "tested"),
+                      heading("Perfect", "perfect"),
+                      heading("Mismatches", "affected"),
+                      heading("No hit", "noHit"),
+                      heading("Max. mismatches", "maximum"),
+                      heading("Affected", "percent"),
+                    ]
+                  : [
+                      heading("Sample / file", "Subject_Sequence_ID"),
+                      heading("Primer", "Primer_Name"),
+                      heading("Segment", "Subject_Segment"),
+                      heading("Identity", "Percent_Identity"),
+                      heading("Mismatches", "Mismatches"),
+                      heading("Positions", "Mismatch_Positions"),
+                      heading("Ct", "Ct_Value"),
+                      heading("Date", "Sample_Date"),
+                      <th key="inspect">Alignment</th>,
+                    ]}
+              </tr>
+            </thead>
+            <tbody>
+              {tab === "primers"
+                ? (visible as ReturnType<typeof aggregatePrimers>).map((p) => (
+                    <tr key={p.key}>
+                      <td>
+                        <button
+                          className="table-link"
+                          onClick={() => {
+                            setFilters({ ...filters, primer: p.primer });
+                            changeTab("samples");
+                          }}
+                        >
+                          {p.primer}
+                        </button>
+                      </td>
+                      <td className="muted">{p.assay || "—"}</td>
+                      <td>
+                        {p.segment || "—"}
+                        <span className="cell-secondary">{p.pool}</span>
+                      </td>
+                      <td>{p.tested}</td>
+                      <td>
+                        <span className="match-count">{p.perfect}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={p.affected ? "mismatch-count" : "muted"}
+                        >
+                          {p.affected}
+                        </span>
+                      </td>
+                      <td>{p.noHit}</td>
+                      <td>{p.noHit === p.tested ? "—" : p.maximum}</td>
+                      <td>{p.percent.toFixed(1)}%</td>
+                    </tr>
+                  ))
+                : (visible as ResultRow[]).map((r, i) => (
+                    <tr
+                      key={`${r.Fasta_File}-${r.Subject_Sequence_ID}-${r.Assay_ID}-${r.Primer_Name}-${i}`}
+                    >
+                      <td className="mono">
+                        {r.Subject_Sequence_ID}
+                        <span className="cell-secondary">{r.Fasta_File}</span>
+                      </td>
+                      <td>
+                        {r.Primer_Name}
+                        <span className="cell-secondary">{r.Assay_Name}</span>
+                      </td>
+                      <td>{r.Subject_Segment || r.Primer_Segment || "—"}</td>
+                      <td>
+                        {r.Hit_Status === "hit" ? (
+                          `${Number(r.Percent_Identity).toFixed(1)}%`
+                        ) : (
+                          <span className="no-hit">No hit</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            Number(r.Mismatches) > 0
+                              ? "mismatch-count"
+                              : "match-count"
+                          }
+                        >
+                          {r.Hit_Status === "hit" ? r.Mismatches : "—"}
+                        </span>
+                      </td>
+                      <td className="mono">{r.Mismatch_Positions || "—"}</td>
+                      <td title={r.Ct_Source}>{r.Ct_Value || "—"}</td>
+                      <td>{r.Sample_Date || "—"}</td>
+                      <td>
+                        <button
+                          className="table-link"
+                          onClick={() => setSelected(r)}
+                        >
+                          Inspect <ChevronRight size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+          {!visible.length && (
+            <div className="empty-table">
+              <h3>No results match these filters</h3>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setFilters(emptyFilters);
+                  setPage(0);
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="table-pagination">
+          <span>
+            {ordered.length ? visiblePage * 25 + 1 : 0}–
+            {Math.min((visiblePage + 1) * 25, ordered.length)} of{" "}
+            {ordered.length} {tab === "primers" ? "primers" : "comparisons"}
+          </span>
+          <div>
+            <button
+              className="icon-button"
+              aria-label="Previous page"
+              disabled={!visiblePage}
+              onClick={() => setPage(visiblePage - 1)}
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <span>
+              Page {visiblePage + 1} of {pages}
+            </span>
+            <button
+              className="icon-button"
+              aria-label="Next page"
+              disabled={visiblePage >= pages - 1}
+              onClick={() => setPage(visiblePage + 1)}
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+        </div>
+      </div>
+      <p className="interpretation-note">
+        Tables summarize the filtered primer/sequence comparisons. “Affected”
+        means at least one mismatch; no-hit results are shown separately. These
+        are descriptive findings, not predictions of assay performance. Sample
+        identifiers use matched metadata when available; otherwise each FASTA
+        record is counted separately.
+      </p>
+      <details className="provenance">
+        <summary>
+          Analysis provenance{" "}
+          <span>
+            Database {m.database.version} · App {m.application_version} ·{" "}
+            {m.blast.version}
+          </span>
+        </summary>
+        <dl>
+          <dt>Selection</dt>
+          <dd>
+            {m.selection.virus} / {m.selection.flu_type || "—"} /{" "}
+            {m.selection.assay_type} /{" "}
+            {m.selection.assay_id || "all matching assays"}
+          </dd>
+          <dt>Database SHA-256</dt>
+          <dd className="mono">{m.database.sha256}</dd>
+          <dt>Git commit</dt>
+          <dd className="mono">{m.git_commit}</dd>
+          <dt>Input files</dt>
+          <dd>
+            {m.files
+              .map((f) => `${f.filename} (${f.records} records)`)
+              .join(", ")}
+          </dd>
+        </dl>
+        <button
+          className="button secondary"
+          onClick={() =>
+            download(
+              analysis.downloads.manifest,
+              "analysis-provenance.json",
+              "application/json",
+            )
+          }
+        >
+          <ArrowDownToLine size={14} /> Download provenance
+        </button>
+      </details>
+      <dialog
+        ref={dialog}
+        className="alignment-dialog"
+        aria-labelledby="alignment-title"
+        onClose={() => setSelected(null)}
+        onClick={(e) => {
+          if (e.target === dialog.current) dialog.current?.close();
+        }}
+      >
+        {selected && (
+          <>
+            <div className="dialog-heading">
+              <div>
+                <div className="eyebrow">ALIGNMENT INSPECTOR</div>
+                <h2 id="alignment-title">{selected.Primer_Name}</h2>
+                <p>{selected.Subject_Sequence_ID}</p>
+              </div>
+              <button
+                className="icon-button"
+                aria-label="Close alignment"
+                onClick={() => dialog.current?.close()}
+              >
+                <X size={19} />
+              </button>
+            </div>
+            <div className="alignment-meta">
+              <span>{selected.Virus_Type}</span>
+              <span>{selected.Assay_Name}</span>
+              <span>
+                {selected.Hit_Status === "hit"
+                  ? `${Number(selected.Subject_End) >= Number(selected.Subject_Start) ? "Forward" : "Reverse"} strand · ${selected.Subject_Start}–${selected.Subject_End}`
+                  : "No BLAST hit"}
+              </span>
+            </div>
+            <p className="sequence-label">Original primer sequence</p>
+            <div className="original-sequence mono">
+              {selected.Primer_Sequence}
+            </div>
+            {selected.Hit_Status === "hit" ? (
+              <>
+                <Alignment row={selected} />
+                <p className="alignment-legend">
+                  <span /> Highlighted bases are mismatches reported by the
+                  analysis engine. Positions are relative to the primer,
+                  starting at 1.
+                </p>
+                <dl className="alignment-details">
+                  <dt>Mismatch positions</dt>
+                  <dd>{selected.Mismatch_Positions || "None"}</dd>
+                  <dt>Substitutions</dt>
+                  <dd className="mono">
+                    {selected.Mismatch_Details || "None"}
+                  </dd>
+                  <dt>Identity</dt>
+                  <dd>{Number(selected.Percent_Identity).toFixed(2)}%</dd>
+                  <dt>Ct / source</dt>
+                  <dd>
+                    {selected.Ct_Value || "—"}{" "}
+                    {selected.Ct_Source && `(${selected.Ct_Source})`}
+                  </dd>
+                </dl>
+              </>
+            ) : (
+              <p className="warning-banner">
+                BLAST did not return a hit for this primer/sequence pair. There
+                is no alignment to inspect; this is separate from a measured
+                mismatch count.
+              </p>
+            )}
+          </>
+        )}
+      </dialog>
+    </section>
+  );
 }
-function Stat({ label, value, note, accented = false }: { label: string; value: string | number; note: string; accented?: boolean }) {
-  return <div className={`stat ${accented ? "accented" : ""}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
+function Stat({
+  label,
+  value,
+  note,
+  accented = false,
+}: {
+  label: string;
+  value: string | number;
+  note: string;
+  accented?: boolean;
+}) {
+  return (
+    <div className={`stat ${accented ? "accented" : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </div>
+  );
 }
 function Alignment({ row }: { row: ResultRow }) {
   const positions = new Set(row.Mismatch_Positions.split(",").map(Number));
   let position = 0;
   const columns = Array.from(row.Query_Alignment).map((base, index) => {
     if (base !== "-") position++;
-    return { base, subject: row.Subject_Alignment[index], position, mismatch: positions.has(position) || base === "-" };
+    return {
+      base,
+      subject: row.Subject_Alignment[index],
+      position,
+      mismatch: positions.has(position) || base === "-",
+    };
   });
-  return <div className="alignment-scroll" aria-label="Primer and subject alignment"><div className="alignment-grid"><div className="alignment-labels"><span>Position</span><span>Primer</span><span>Subject</span></div>{columns.map((c, i) => <div className={`alignment-column ${c.mismatch ? "mismatch" : ""}`} key={i}><span>{c.base === "-" ? "·" : c.position}</span><b>{c.base}</b><b>{c.subject}</b></div>)}</div></div>;
+  return (
+    <div className="alignment-scroll" aria-label="Primer and subject alignment">
+      <div className="alignment-grid">
+        <div className="alignment-labels">
+          <span>Position</span>
+          <span>Primer</span>
+          <span>Subject</span>
+        </div>
+        {columns.map((c, i) => (
+          <div
+            className={`alignment-column ${c.mismatch ? "mismatch" : ""}`}
+            key={i}
+          >
+            <span>{c.base === "-" ? "·" : c.position}</span>
+            <b>{c.base}</b>
+            <b>{c.subject}</b>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

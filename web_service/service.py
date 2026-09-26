@@ -2,6 +2,7 @@
 
 import csv
 import hashlib
+import html
 import io
 import json
 import os
@@ -134,7 +135,7 @@ def validate_fasta(data: bytes) -> str:
             if current is not None and not length:
                 raise WebError("FASTA contains a header without a sequence.", "invalid_fasta")
             header = line[1:].split()
-            if not header or len(header[0]) > 200:
+            if not header or len(header[0]) > 200 or len(line) > 1000:
                 raise WebError("FASTA headers need an identifier of at most 200 characters.", "invalid_fasta")
             current, length = header[0], 0
             # BLAST treats pipe-delimited IDs specially; reject reserved parser prefixes.
@@ -157,7 +158,9 @@ def validate_fasta(data: bytes) -> str:
             length += len(line)
     if not seen or not length:
         raise WebError("FASTA is empty or contains a header without a sequence.", "invalid_fasta")
-    return text
+    # The engine's two FASTA readers differ in whitespace handling. Normalize
+    # surrounding whitespace once so validation and both readers see the same records.
+    return "\n".join(line.strip() for line in text.splitlines()) + "\n"
 
 
 def validate_metadata(data: bytes) -> str:
@@ -169,7 +172,11 @@ def validate_metadata(data: bytes) -> str:
     if not rows or len(rows) < 2 or len(rows) > 2001:
         raise WebError("Metadata CSV needs a header and 1–2000 data rows.", "invalid_metadata")
     header = rows[0]
-    if len(header) > 100 or len(set(header)) != len(header) or any(not c.strip() for c in header):
+    if (
+        len(header) > 100
+        or len({engine.normalize_column_name(c) for c in header}) != len(header)
+        or any(not c.strip() for c in header)
+    ):
         raise WebError("Metadata CSV needs unique, nonempty column names (at most 100).", "invalid_metadata")
     if not engine.find_metadata_column(header, {"sampleid", "sample", "id"}):
         raise WebError("Metadata CSV needs a SampleID, Sample_ID, Sample, or ID column.", "invalid_metadata")
@@ -328,20 +335,18 @@ def analyze(
         for row in rows
     ]
     engine.write_csv_rows(csv_rows, csv_stream)
-    html = primer_report.build_html_report(rows)
+    report_html = primer_report.build_html_report(rows)
     manifest_json = json.dumps(manifest, indent=2)
-    import html as html_module
-
     provenance = (
         '<details style="margin:24px"><summary>Analysis provenance</summary><pre>'
-        + html_module.escape(manifest_json)
+        + html.escape(manifest_json)
         + "</pre></details>"
     )
-    html = html.replace("</body>", provenance + "</body>")
+    report_html = report_html.replace("</body>", provenance + "</body>")
     return {
         "rows": rows,
         "summary": summary,
         "manifest": manifest,
         "warnings": list(dict.fromkeys(warnings)),
-        "downloads": {"csv": csv_stream.getvalue(), "html": html, "manifest": manifest_json},
+        "downloads": {"csv": csv_stream.getvalue(), "html": report_html, "manifest": manifest_json},
     }

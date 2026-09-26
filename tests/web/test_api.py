@@ -196,3 +196,105 @@ def test_executable_resolution_precedence(tmp_path, monkeypatch):
     monkeypatch.setenv("BLASTN_PATH", str(tmp_path / "missing"))
     with pytest.raises(engine.BlastUnavailableError):
         engine.resolve_blastn()
+
+
+@pytest.fixture
+def simulated_blast(monkeypatch):
+    """Exercise selection/validation without paying per-primer process startup."""
+    monkeypatch.setattr(engine, "resolve_blastn", lambda: "/test/blastn")
+    monkeypatch.setattr(
+        engine.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "blastn: test\n", "")
+    )
+    monkeypatch.setattr(engine, "run_blastn", lambda *a, **k: {})
+
+
+@pytest.mark.parametrize("subtype", ["A", "H1", "H3", "B"])
+def test_influenza_subtypes_use_canonical_selection(client, monkeypatch, simulated_blast, subtype):
+    monkeypatch.delenv("PRIMER_DATABASE_PATH")
+    response = post(
+        client,
+        {"virus": "influenza", "flu_type": subtype, "assay_type": "pcr"},
+        b">01-HA|sample\nACGTACGT\n>03-M|sample\nACGTACGT\n>08-NS|sample\nACGTACGT",
+    )
+    assert response.status_code == 200, response.text
+    db, _, _ = service.load_database()
+    expected_virus, expected = engine.select_primer_records(db, "influenza", subtype, "pcr")
+    assert response.json()["summary"]["primers"] == len(expected)
+    assert {r["Virus_Type"] for r in response.json()["rows"]} == {expected_virus}
+
+
+@pytest.mark.parametrize(
+    "assay_type,assay_id,count",
+    [
+        ("pcr", "fhi-sars-cov-2", 3),
+        ("ngs", "sars2-ngs-vmidt-2.2", 68),
+        ("all", None, 268),
+    ],
+)
+def test_pcr_ngs_and_all_selection(client, monkeypatch, simulated_blast, assay_type, assay_id, count):
+    monkeypatch.delenv("PRIMER_DATABASE_PATH")
+    selection = {"virus": "SARS-CoV-2", "assay_type": assay_type}
+    if assay_id:
+        selection["assay_id"] = assay_id
+    response = post(client, selection)
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"]["primers"] == count
+    if assay_id:
+        assert {r["Assay_ID"] for r in response.json()["rows"]} == {assay_id}
+
+
+def test_multiple_files_and_cleanup_on_failure(client, monkeypatch, simulated_blast):
+    observed = []
+
+    def inspect_files(*args, **kwargs):
+        observed.append(Path(args[2]))
+        assert observed[-1].is_file()
+        return {}
+
+    monkeypatch.setattr(engine, "run_blastn", inspect_files)
+    response = client.post(
+        "/api/analyze",
+        data={"virus": "SARS-CoV-2"},
+        files=[("files", ("../../one.fasta", b">x\nACGT")), ("files", ("two.fasta", b">x\nACGT"))],
+    )
+    assert response.status_code == 200
+    assert response.json()["summary"]["files"] == 2
+    assert {r["Fasta_File"] for r in response.json()["rows"]} == {"one.fasta", "two.fasta"}
+    assert all(not p.exists() and not p.parent.parent.exists() for p in observed)
+
+    def fail(*args, **kwargs):
+        observed.append(Path(args[2]))
+        raise engine.BlastError("failure")
+
+    monkeypatch.setattr(engine, "run_blastn", fail)
+    assert post(client).status_code == 502
+    assert all(not p.exists() and not p.parent.parent.exists() for p in observed)
+
+
+def test_large_results_are_rejected_and_work_is_bounded(client, monkeypatch, simulated_blast):
+    monkeypatch.setattr(service, "MAX_RESPONSE_BYTES", 50)
+    assert post(client).json()["error"]["code"] == "result_too_large"
+    monkeypatch.setattr(service, "MAX_COMPARISONS", 0)
+    assert post(client).json()["error"]["code"] == "work_limit"
+
+
+def test_downloads_escape_untrusted_content(client, simulated_blast):
+    response = post(client, content=b">=1+1\nACGT\n></script><script>alert(1)</script>\nACGT")
+    assert response.status_code == 200
+    result = response.json()
+    csv_rows = list(csv.DictReader(io.StringIO(result["downloads"]["csv"])))
+    assert csv_rows[0]["Subject_Sequence_ID"] == "'=1+1"
+    assert result["rows"][0]["Subject_Sequence_ID"] == "=1+1"
+    assert "</script><script>alert(1)</script>" not in result["downloads"]["html"]
+
+
+def test_missing_segments_produce_actionable_error(client, simulated_blast):
+    response = post(client, {"virus": "influenza", "flu_type": "H3"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "no_comparisons"
+
+
+def test_trimmed_fasta_headers_match_both_engine_readers(client, simulated_blast):
+    response = post(client, content=b"  >sample  \n ACGT \n")
+    assert response.status_code == 200
+    assert response.json()["rows"][0]["Subject_Sequence_ID"] == "sample"

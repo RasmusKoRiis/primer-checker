@@ -24,6 +24,7 @@ jobs:
         run: |
           docker run --rm --platform linux/amd64 -v "$PWD:/work" -w /work amazonlinux:2023 \
             /bin/sh -c 'dnf install -y python3 libgomp bzip2-libs && python3 scripts/package_blast.py'
+          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
       - run: python -m ruff check api web_service tests/web scripts/package_blast.py

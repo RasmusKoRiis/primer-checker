@@ -3,7 +3,7 @@
 import json
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
@@ -135,8 +135,6 @@ async def analyze(request: Request):
             "result_too_large",
             413,
         )
-    from fastapi.responses import Response
-
     return Response(
         encoded,
         media_type="application/json",
