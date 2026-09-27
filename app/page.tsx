@@ -2,6 +2,7 @@
 import { useLanguage, LanguageSwitch } from "./components/language";
 import Documentation from "./components/documentation";
 import AnalysisIntro from "./components/analysis-intro";
+import PcrMachine from "./components/pcr-machine";
 import { FastaFormatHelp } from "./components/input-format-help";
 
 import {
@@ -724,21 +725,13 @@ export default function Home() {
                     {t("selected ·")} {(bytes / 1000).toFixed(0)} kB
                   </span>
                   <button
-                    className="button primary"
+                    className="button primary run-button"
                     type="submit"
                     disabled={!readyToAnalyze || busy}
+                    data-running={busy}
                   >
-                    {busy ? (
-                      <>
-                        <PixelLoader size={16} />
-                        {t("Analyzing…")}
-                      </>
-                    ) : (
-                      <>
-                        {t("Analyze sequences")}
-                        <ArrowRight size={16} />
-                      </>
-                    )}
+                    <PcrMachine running={busy} />
+                    <span>{t(busy ? "Analyzing…" : "Analyze sequences")}</span>
                   </button>
                 </div>
               </div>
@@ -750,7 +743,6 @@ export default function Home() {
             )}
             {busy && (
               <div className="analysis-status" role="status">
-                <PixelLoader size={20} />
                 <div>
                   <strong>{t("Analysis request in progress")}</strong>
                   <p>

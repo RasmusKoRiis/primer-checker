@@ -25,10 +25,19 @@ Primer Checker mark. The upload target uses a 32 px icon. The matching static
 browser-tab icon is `app/icon.svg`.
 
 Keep motion small and stepped. The logo plays a short entrance sequence; hover
-and keyboard focus trigger brief interactions. Only the loading indicator loops
+and keyboard focus trigger brief interactions. Loading indicators loop only
 while work is pending. Under `prefers-reduced-motion: reduce`, icons and the
 intro remain still. Icons are hidden from assistive technology; the surrounding
 controls provide their accessible names.
+
+The Analyze sequences button contains an original 40 × 36 pixel thermal cycler
+from `app/components/pcr-machine.tsx`, displayed at 60 × 54 px. Its lid closes
+in six steps when a request begins, then the display and indicator lamp cycle
+until that request finishes or fails. Idle shows the open lid and tube block.
+This is a decorative activity indicator, with no invented temperatures, cycle
+counts or progress estimates. It adds no media download, timer or delay to the
+analysis. Reduced-motion users get a static closed lid and lit display while
+the translated button text and live status explain that analysis is running.
 
 Keep the opening section text-only and the working area compact. Maintain the
 English/Norwegian layout, visible dummy-data notices, and readable result colors.
