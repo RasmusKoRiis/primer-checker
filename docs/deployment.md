@@ -281,10 +281,14 @@ to the existing Vercel project under `rasmus-projects1` for production.
 
 On 27 September 2026, Vercel confirmed the project attachment and ownership.
 The CNAME below was saved successfully in Domeneshop's DNS manager with a
-TTL of 1800 seconds. At the subsequent check, DNS publication and HTTPS
-verification were still pending: the `.no` registry nameserver and public
-resolvers returned NXDOMAIN for the newly registered domain. The existing
-[Vercel address](https://primer-checker.vercel.app) remains available.
+TTL of 1800 seconds. Later that day, the `.no` registry published the domain's
+nameservers and both Cloudflare (1.1.1.1) and Google (8.8.8.8) public resolvers
+returned the correct CNAME. Vercel reports `configured_correctly` with verified
+ownership. [primercheck.rasmuskriis.no](https://primercheck.rasmuskriis.no) is live:
+the homepage returns HTTP 200 with valid TLS, `/api/health` reports `status: ok`
+and BLAST 2.15.0+, and a browser analysis of the synthetic example completes
+with two records, three primers, six hits and one expected mismatch.
+The existing [Vercel address](https://primer-checker.vercel.app) also remains available.
 
 In the new Domeneshop portal, use **Domains → Manage DNS**, then **Edit DNS
 Zone** for `rasmuskriis.no`. The saved record matches `vercel domains verify`:
@@ -297,11 +301,10 @@ This record is scoped to the requested subdomain. The existing root/`www`,
 mail and other records were preserved. The registrar uses the default
 `ns1.no1.groupdnsservice.com` and `ns2.no1.groupdnsservice.com` nameservers,
 matching the DNS zone. DNS changes belong in Domeneshop while it hosts the
-domain's DNS; `vercel dns add` does not update that external zone. Do not add
-the CNAME again while waiting for publication.
+domain's DNS; `vercel dns add` does not update that external zone. Keep the
+existing CNAME rather than adding a duplicate.
 
-After the domain registration is active and the record resolves, verify DNS,
-automatic HTTPS provisioning and the application:
+To repeat the DNS, HTTPS and application checks:
 
 ```sh
 npx vercel domains verify primercheck.rasmuskriis.no --scope rasmus-projects1

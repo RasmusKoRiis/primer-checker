@@ -634,9 +634,10 @@ PR is still open and no branches were merged. The existing fork,
 the production branch and other branches creating protected previews.
 PCR/NGS analysis, custom databases, report downloads, and workload rejection
 were verified on Vercel. The public browser flow also completes a real analysis.
-The custom hostname `primercheck.rasmuskriis.no` is attached to the Vercel
-project, and the CNAME is saved in Domeneshop. DNS publication and HTTPS
-verification are pending.
+The custom hostname [primercheck.rasmuskriis.no](https://primercheck.rasmuskriis.no)
+is live on the same Vercel project, with its CNAME managed in Domeneshop.
+Public DNS, HTTPS, the health endpoint and a complete dummy-example browser
+analysis were verified on 27 September 2026.
 No paid service or plan upgrade was added.
 
 See [the deployment guide](docs/deployment.md) for verified results, direct
