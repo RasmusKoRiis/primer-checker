@@ -46,6 +46,9 @@ Only the coral “a” in “base” animates: it repeatedly pixelates and chang
 between a, c, g and t, with a 6.4-second loop. The rest of the headline stays
 sharp and still, and the letter has no outline. A small decorative canvas
 preserves the fixed letter width and the native accessible heading text.
+Leading space keeps the pixelated edges clear of the preceding “b”. The intro
+description uses responsive 16–20 px type, vertically centered beside the
+headline on larger screens.
 It updates at most about eight times per second, pauses when off-screen or in
 a hidden tab, and adapts to resizing. Reduced-motion users see a static “a”.
 There are no duplicate intro links: Analysis and Documentation remain in the

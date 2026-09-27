@@ -1852,6 +1852,7 @@ tbody tr:hover {
 .focus-mismatch {
   position: relative;
   display: inline-block;
+  margin-inline-start: 0.075em;
 }
 .focus-canvas {
   position: absolute;
@@ -1867,10 +1868,13 @@ tbody tr:hover {
 .focus-mismatch[data-cycling="true"] .focus-canvas {
   opacity: 1;
 }
+.intro-summary {
+  align-self: center;
+}
 .intro-summary > p {
-  max-width: 380px;
-  font-size: 13px;
-  line-height: 1.75;
+  max-width: 440px;
+  font-size: clamp(16px, 1.6vw, 20px);
+  line-height: 1.6;
   text-wrap: pretty;
 }
 .analysis-heading {
