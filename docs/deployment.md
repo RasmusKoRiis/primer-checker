@@ -279,21 +279,26 @@ The owner registered `rasmuskriis.no` through Domeneshop and requested
 `primercheck.rasmuskriis.no` for this application. That hostname is attached
 to the existing Vercel project under `rasmus-projects1` for production.
 
-On 27 September 2026, Vercel confirmed the project attachment and ownership,
-but DNS configuration was still pending. Public resolvers returned NXDOMAIN
-for the newly registered domain. The existing
+On 27 September 2026, Vercel confirmed the project attachment and ownership.
+The CNAME below was saved successfully in Domeneshop's DNS manager with a
+TTL of 1800 seconds. At the subsequent check, DNS publication and HTTPS
+verification were still pending: the `.no` registry nameserver and public
+resolvers returned NXDOMAIN for the newly registered domain. The existing
 [Vercel address](https://primer-checker.vercel.app) remains available.
 
-In Domeneshop, open the domain's **DNS-pekere** settings and add the record
-returned by `vercel domains verify`:
+In the new Domeneshop portal, use **Domains → Manage DNS**, then **Edit DNS
+Zone** for `rasmuskriis.no`. The saved record matches `vercel domains verify`:
 
 | Type  | Host          | Target                                |
 | ----- | ------------- | ------------------------------------- |
 | CNAME | `primercheck` | `ebd88c2a19e11954.vercel-dns-017.com` |
 
-This record is scoped to the requested subdomain. Keep the existing nameservers
-and unrelated website/mail records. DNS changes belong in Domeneshop while it
-hosts the domain's DNS; `vercel dns add` does not update that external zone.
+This record is scoped to the requested subdomain. The existing root/`www`,
+mail and other records were preserved. The registrar uses the default
+`ns1.no1.groupdnsservice.com` and `ns2.no1.groupdnsservice.com` nameservers,
+matching the DNS zone. DNS changes belong in Domeneshop while it hosts the
+domain's DNS; `vercel dns add` does not update that external zone. Do not add
+the CNAME again while waiting for publication.
 
 After the domain registration is active and the record resolves, verify DNS,
 automatic HTTPS provisioning and the application:

@@ -635,7 +635,8 @@ the production branch and other branches creating protected previews.
 PCR/NGS analysis, custom databases, report downloads, and workload rejection
 were verified on Vercel. The public browser flow also completes a real analysis.
 The custom hostname `primercheck.rasmuskriis.no` is attached to the Vercel
-project; its Domeneshop DNS setup and HTTPS verification are pending.
+project, and the CNAME is saved in Domeneshop. DNS publication and HTTPS
+verification are pending.
 No paid service or plan upgrade was added.
 
 See [the deployment guide](docs/deployment.md) for verified results, direct
