@@ -5,6 +5,8 @@ export interface Catalog {
     sha256: string;
     source?: string;
     filename?: string;
+    is_dummy?: boolean;
+    purpose?: string;
   };
   warnings?: string[];
   viruses: {

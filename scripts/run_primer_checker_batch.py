@@ -3,7 +3,7 @@
 Run primer analysis over a folder of FASTA files with targets inferred from filenames.
 
 Examples:
-    python3 scripts/run_primer_checker_batch.py --input-folder data --primers primer_db/fhi_primers.normalized.json
+    python3 scripts/run_primer_checker_batch.py --input-folder data --primers primer_db/dummy_primers.json
     python3 scripts/run_primer_checker_batch.py --input-folder data --analysis-only
     python3 scripts/run_primer_checker_batch.py --input-folder data --dry-run
 """
@@ -23,11 +23,7 @@ FASTA_SUFFIXES = {".fa", ".fasta", ".fna", ".fas"}
 
 
 def default_primer_db() -> str:
-    unified = REPO_ROOT / "primer_db" / "fhi_primers.unified.json"
-    normalized = REPO_ROOT / "primer_db" / "fhi_primers.normalized.json"
-    if unified.exists():
-        return str(unified)
-    return str(normalized if normalized.exists() else REPO_ROOT / "primers.json")
+    return str(REPO_ROOT / "primer_db" / "dummy_primers.json")
 
 
 def find_fasta_files(input_folder: Path, recursive: bool = False) -> list[Path]:
@@ -54,7 +50,7 @@ def main() -> None:
     parser.add_argument(
         "--primers",
         default=default_primer_db(),
-        help="Primer JSON file. Defaults to primer_db/fhi_primers.normalized.json when present.",
+        help="Primer JSON file. Defaults to primer_db/dummy_primers.json (synthetic test data only).",
     )
     parser.add_argument("--output", default="batch_primer_report.csv", help="Combined output CSV path.")
     parser.add_argument(
@@ -96,6 +92,8 @@ def main() -> None:
 
     primer_records, validation = primer_analysis.load_primer_records(args.primers)
     primer_analysis.print_validation_messages(validation)
+    if primer_analysis.load_primer_library(args.primers).get("purpose") == "synthetic-test-only":
+        print("DUMMY DATABASE: synthetic software test data only.", file=sys.stderr)
     metadata_records, metadata_validation = primer_analysis.load_metadata_csv(args.metadata_csv)
     if metadata_validation.errors:
         error_text = "\n".join(f"- {error}" for error in metadata_validation.errors)

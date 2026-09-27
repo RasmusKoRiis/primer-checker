@@ -78,7 +78,7 @@ export default function Home() {
   } | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [virus, setVirus] = useState("SARS-CoV-2");
+  const [virus, setVirus] = useState("Demo-virus");
   const [subtype, setSubtype] = useState("");
   const [assayType, setAssayType] = useState("pcr");
   const [assay, setAssay] = useState("");
@@ -236,7 +236,7 @@ export default function Home() {
       setCustomCatalog(undefined);
       setDatabase(null);
       setDatabaseReset((n) => n + 1);
-      setVirus("SARS-CoV-2");
+      setVirus("Demo-virus");
       setAssayType("pcr");
       setAssay("");
       setError("");
@@ -366,7 +366,12 @@ export default function Home() {
               </strong>
               <small>
                 {catalog
-                  ? database?.name || t("Reference library")
+                  ? database?.name ||
+                    t(
+                      catalog.database.is_dummy
+                        ? "Dummy database"
+                        : "Installed database",
+                    )
                   : t("Choose a valid database")}
               </small>
             </div>

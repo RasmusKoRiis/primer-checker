@@ -14,6 +14,7 @@ import {
 import type { Catalog } from "../lib/results";
 import { download } from "../lib/results";
 import { makeDatabase, type PrimerDraft } from "../lib/database";
+import dummyDatabase from "../../primer_db/dummy_primers.json";
 
 const emptyPrimer = (key: number): PrimerDraft => ({
   key,
@@ -149,7 +150,7 @@ export default function DatabasePicker({
         </div>
         <div>
           <h2 id="database-title">{t("Primer database")}</h2>
-          <p>{t("Use the reference library or bring your own primers")}</p>
+          <p>{t("Try dummy data or bring your own primers")}</p>
         </div>
       </div>
       <div
@@ -158,7 +159,12 @@ export default function DatabasePicker({
         aria-label={t("Database source")}
       >
         {[
-          ["bundled", "Reference database"],
+          [
+            "bundled",
+            bundled?.database.is_dummy === false
+              ? "Installed database"
+              : "Dummy database",
+          ],
           ["upload", "Upload JSON"],
           ["build", "Build a database"],
         ].map(([value, label]) => (
@@ -176,10 +182,36 @@ export default function DatabasePicker({
       </div>
       <DatabaseFormatHelp />
       {mode === "bundled" && (
-        <p className="database-hint">
-          {t("Bundled PCR schemes and NGS panels. Version")}{" "}
-          {bundled?.database.version || t("loading…")}.
-        </p>
+        <div>
+          {bundled?.database.is_dummy && (
+            <div className="warning-banner" role="note">
+              <strong>{t("Dummy data — testing only")}</strong>
+              <p>
+                {t(
+                  "These invented sequences demonstrate the software. They are not a validated primer set. Upload or build your own database to check your sequences.",
+                )}
+              </p>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() =>
+                  download(
+                    JSON.stringify(dummyDatabase, null, 2) + "\n",
+                    "dummy-primers.json",
+                    "application/json",
+                  )
+                }
+              >
+                <Download size={15} />
+                {t("Download dummy database")}
+              </button>
+            </div>
+          )}
+          <p className="database-hint">
+            {t("Database version")}:{" "}
+            {bundled?.database.version || t("loading…")}
+          </p>
+        </div>
       )}
       {mode === "upload" && (
         <div className="database-upload">

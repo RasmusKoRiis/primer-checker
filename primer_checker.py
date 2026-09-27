@@ -84,6 +84,8 @@ def main():
 
     primer_records, validation = load_primer_records(args.primers)
     print_validation_messages(validation)
+    if load_primer_library(args.primers).get("purpose") == "synthetic-test-only":
+        print("DUMMY DATABASE: synthetic software test data only.", file=sys.stderr)
     if args.validate_primers:
         print(f"Primer library validation succeeded for {args.primers}")
         return

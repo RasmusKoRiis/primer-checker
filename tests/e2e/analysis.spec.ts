@@ -101,6 +101,14 @@ test("upload, analyze with real BLAST, inspect mismatch, and download reports", 
   await expect(
     page.getByRole("combobox", { name: "Virus", exact: true }),
   ).toBeEnabled();
+  await expect(
+    page.getByText("Dummy data — testing only", { exact: true }),
+  ).toBeVisible();
+  const dummyDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download dummy database", exact: true })
+    .click();
+  expect((await dummyDownload).suggestedFilename()).toBe("dummy-primers.json");
   await page
     .getByLabel("Upload FASTA files")
     .setInputFiles(path.resolve("public/example.fasta"));
@@ -111,6 +119,9 @@ test("upload, analyze with real BLAST, inspect mismatch, and download reports", 
     page.getByRole("heading", { name: "Compatibility results" }),
   ).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText("6 comparisons", { exact: true })).toBeVisible();
+  await expect(page.locator(".results-section .warning-banner")).toContainText(
+    "Dummy database",
+  );
   await page.getByRole("tab", { name: "By sample 6", exact: true }).click();
   await page
     .getByRole("combobox", { name: "Mismatches", exact: true })
@@ -126,6 +137,9 @@ test("upload, analyze with real BLAST, inspect mismatch, and download reports", 
   await expect(page.locator(".alignment-column.mismatch")).toHaveCount(1);
   await page.getByRole("button", { name: "Close alignment" }).click();
   await page.getByRole("button", { name: "Norsk", exact: true }).click();
+  await expect(
+    page.getByText("Syntetiske testdata — kun for testing", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: "Kompatibilitetsresultater",

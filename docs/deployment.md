@@ -1,6 +1,6 @@
 # Deployment
 
-## Verified live Hobby deployment (2026-09-26)
+## Live Hobby deployment
 
 Vercel project **primer-checker** is linked to this workspace under
 **rasmus-projects1** (Rasmus' projects), using the existing **Hobby** plan.
@@ -19,15 +19,18 @@ The stable production address opens without a Vercel login. Standard Protection
 still protects preview and generated deployment URLs. `npx vercel curl`
 supports authenticated preview checks without exposing credentials.
 
-Verified on the actual hosted function:
+The initial deployment was verified on the hosted function. Its real primer
+library has since been replaced in source by `primer_db/dummy_primers.json`
+(synthetic test data only). Current catalog and example expectations are:
 
 - `/api/health`: BLAST **2.15.0+** executes successfully; the build verified its
   **33.5 MB** Linux bundle and four shared libraries.
-- `/api/catalog`: all seven bundled PCR/NGS schemes load with the expected
-  database fingerprint and upload/workload limits.
+- `/api/catalog`: three dummy schemes (PCR, NGS and influenza routing),
+  `is_dummy: true`, version `dummy-1.0`, plus upload/workload limits.
 - PCR on `public/example.fasta`: six comparisons, six hits, one mismatch
   (`9:T>A`), with valid CSV, HTML, and provenance downloads.
-- VMIDT 2.2 NGS panel: 68 primers and 136 comparisons complete successfully.
+- Dummy NGS example: two primers and four comparisons; the larger real panels
+  used in the initial deployment are no longer bundled.
 - Custom influenza JSON upload and H1 preflight: three records and two eligible
   comparisons, confirming segment and subtype filtering.
 - A 201-record batch returns **413**; malformed FASTA returns **422**.
@@ -73,7 +76,7 @@ The install command is `python3 scripts/package_blast.py && npm ci`; the build
 command is `npm run build`. BLAST is prepared during **installation**, before
 Python function file collection, rather than downloaded on incoming requests.
 The function explicitly includes `bin/`, both shared engine/report modules,
-`web_service/`, `primer_db/` (including NGS assets), and `report_text/`.
+`web_service/`, `primer_db/` (synthetic fixtures only), and `report_text/`.
 Virtual environments, Node dependencies, frontend build files, tests, legacy
 archives, and local output are excluded from the Python bundle.
 
@@ -187,7 +190,7 @@ provide `--archive /path/to/the/pinned/archive.tar.gz`; checksums still apply.
 | Variable | Default / use |
 | --- | --- |
 | `BLASTN_PATH` | Optional explicit executable; normally leave unset on Vercel. |
-| `PRIMER_DATABASE_PATH` | Optional operator-controlled database path; defaults to the included unified database. Its assets must also be bundled. Never accepted from request input. |
+| `PRIMER_DATABASE_PATH` | Optional operator-controlled database path; defaults to `primer_db/dummy_primers.json` (dummy test data only). Any custom assets must also be bundled. Never accepted from request input. |
 | `APP_GIT_COMMIT` | Optional local reproducibility field. |
 | `VERCEL_GIT_COMMIT_SHA` | Automatically supplied by Vercel and preferred over `APP_GIT_COMMIT`. |
 | `PYTHON` | Optional local interpreter override for `npm run dev`. |

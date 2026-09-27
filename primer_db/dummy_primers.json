@@ -1,0 +1,171 @@
+{
+  "schema_version": "1.0",
+  "database_version": "dummy-1.0",
+  "purpose": "synthetic-test-only",
+  "description": "DUMMY DATABASE — synthetic sequences for software testing only. No real assays are included. Influenza labels demonstrate segment and subtype routing only.",
+  "schemes": [
+    {
+      "scheme_id": "dummy-pcr",
+      "display_name": "DUMMY — PCR example",
+      "organism": "Demo-virus",
+      "version": "dummy-1.0",
+      "assay_type": "pcr",
+      "source": "Synthetic software test data",
+      "primers": [
+        {
+          "id": "DUMMY_F",
+          "name": "DUMMY_F",
+          "sequence": "GTCAGACATCGATGCTACGTCAGGATCGTACCTAGCTGAC",
+          "role": "forward_primer",
+          "segment": "",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_R",
+          "name": "DUMMY_R",
+          "sequence": "CGTATCAGGCTACATGAGTCGCATCTGACGATCTAGTCGA",
+          "role": "reverse_primer",
+          "segment": "",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_Probe",
+          "name": "DUMMY_Probe",
+          "sequence": "ATGCGACTACGATCTGACCTAGTCAGATCGTACGCTACAG",
+          "role": "probe",
+          "segment": "",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        }
+      ]
+    },
+    {
+      "scheme_id": "dummy-ngs",
+      "display_name": "DUMMY — NGS example",
+      "organism": "Demo-virus",
+      "version": "dummy-1.0",
+      "assay_type": "ngs",
+      "source": "Synthetic software test data",
+      "primers": [
+        {
+          "id": "DUMMY_LEFT",
+          "name": "DUMMY_LEFT",
+          "sequence": "GTCAGACATCGATGCTACGTCAGGATCGTACCTAGCTGAC",
+          "role": "forward_primer",
+          "segment": "",
+          "pool": "1",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_RIGHT",
+          "name": "DUMMY_RIGHT",
+          "sequence": "CGTATCAGGCTACATGAGTCGCATCTGACGATCTAGTCGA",
+          "role": "reverse_primer",
+          "segment": "",
+          "pool": "1",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        }
+      ]
+    },
+    {
+      "scheme_id": "dummy-influenza",
+      "display_name": "DUMMY — influenza routing example",
+      "organism": "Influenza-A",
+      "version": "dummy-1.0",
+      "assay_type": "pcr",
+      "source": "Synthetic software test data",
+      "primers": [
+        {
+          "id": "DUMMY_PB2_F",
+          "name": "DUMMY_PB2_F",
+          "sequence": "CGGCCCCACGAAGGCCTCAGCACCGGCTTCTATTTGAAAT",
+          "role": "forward_primer",
+          "segment": "PB2",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_PB1_F",
+          "name": "DUMMY_PB1_F",
+          "sequence": "ATGATTCGCTGGCCGGGCAGTGGTACTCGTGTTGGGCTAA",
+          "role": "forward_primer",
+          "segment": "PB1",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_PA_F",
+          "name": "DUMMY_PA_F",
+          "sequence": "TCTGAGCAACCCCACTAGTGTCGGCATCACGCATATAACG",
+          "role": "forward_primer",
+          "segment": "PA",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_HA_F",
+          "name": "DUMMY_HA_F",
+          "sequence": "CTTGAGAGCATTACATCGGGTATATGTGAGGAGACCATCA",
+          "role": "forward_primer",
+          "segment": "HA",
+          "pool": "",
+          "subtype_tags": [
+            "H1",
+            "H5N1"
+          ],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_NP_F",
+          "name": "DUMMY_NP_F",
+          "sequence": "GTGGAGGTTAGTACAGTGAGTTTGATCGGGACGAATCGTA",
+          "role": "forward_primer",
+          "segment": "NP",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_NA_F",
+          "name": "DUMMY_NA_F",
+          "sequence": "CGGACGAAGCCGAGGCGGTCCCCCCTGGAGGCTAAATGGA",
+          "role": "forward_primer",
+          "segment": "NA",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_M_F",
+          "name": "DUMMY_M_F",
+          "sequence": "AACCGTAAGGTATTATCGGCCTGAGTGGATTTCCTATAAA",
+          "role": "forward_primer",
+          "segment": "M",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        },
+        {
+          "id": "DUMMY_NS_F",
+          "name": "DUMMY_NS_F",
+          "sequence": "TGAGGCAGTAAGACGGCTTGGTACAGTCCCTTTGGCCCCA",
+          "role": "forward_primer",
+          "segment": "NS",
+          "pool": "",
+          "subtype_tags": [],
+          "notes": "DUMMY: synthetic software test data; not a validated assay."
+        }
+      ]
+    }
+  ]
+}

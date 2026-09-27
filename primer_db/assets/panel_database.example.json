@@ -1,22 +1,24 @@
 {
   "schema_version": "3.0",
-  "database_version": "2026-05-21",
+  "database_version": "dummy-1.0",
+  "purpose": "synthetic-test-only",
+  "description": "DUMMY DATABASE — synthetic sequences for software testing only. No real assays are included. Influenza labels demonstrate segment and subtype routing only.",
   "viruses": [
     {
-      "organism": "SARS-CoV-2",
+      "organism": "Demo-virus",
       "ngs": {
         "panels": [
           {
-            "panel_id": "sars2-ngs-vmidt-2.2",
-            "display_name": "SARS-CoV-2 VMIDT 2.2 NGS Panel",
-            "panel_version": "VMIDT.2.2",
+            "panel_id": "dummy-asset-ngs",
+            "display_name": "DUMMY — BED/FASTA panel example",
+            "panel_version": "dummy-1.0",
             "reference": {
-              "name": "NC_045512.2",
+              "name": "DUMMY_reference",
               "coordinate_system": "0-based BED"
             },
             "files": {
-              "bed": "SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.scheme.bed",
-              "primers_fasta": "SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.primers.fasta"
+              "bed": "dummy/primers.bed",
+              "primers_fasta": "dummy/primers.fasta"
             },
             "mapping": {
               "bed_name_field": "name",

@@ -80,7 +80,7 @@ def package(output: Path, archive: Path | None = None):
         raise RuntimeError("Unexpected BLAST version.")
     with tempfile.TemporaryDirectory(prefix="blast-smoke-") as temp:
         fasta = Path(temp) / "smoke.fasta"
-        fasta.write_text(">synthetic\nCTGCAGATTTGGATGATTTCTCC\n")
+        fasta.write_text(">synthetic\nCATATGAATTGAGGCAGAACGGT\n")
         hit = subprocess.run(
             [str(binary), "-query", str(fasta), "-subject", str(fasta), "-word_size", "4", "-outfmt", "6"],
             capture_output=True,

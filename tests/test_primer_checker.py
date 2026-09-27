@@ -46,22 +46,23 @@ def test_iupac_matches_do_not_create_mismatch_positions_or_details():
 
 
 def test_reconstructed_alignment_shows_primer_end_bases_from_subject_sequence():
-    primer = "TGGGAAATCCAGAGTGTGAATCACT"
-    subject = "N" * 235 + "TAGGAAATCCAGAGTGTGAATCACT" + "N" * 10
+    primer = "AGCTACGATCGTACGATGCTACGTA"
+    subject_bases = "AACTACGATCGTACGATGCTACGTA"
+    subject = "N" * 235 + subject_bases + "N" * 10
 
     query_alignment, subject_alignment = primer_checker.reconstruct_full_primer_alignment(
         primer_seq=primer,
-        qseq="GGAAATCCAGAGTGTGAATCACT",
-        sseq="GGAAATCCAGAGTGTGAATCACT",
+        qseq=primer[2:],
+        sseq=subject_bases[2:],
         qstart=3,
-        qend=25,
+        qend=len(primer),
         sstart=238,
-        send=260,
+        send=235 + len(primer),
         subject_sequence=subject,
     )
 
     assert query_alignment == primer
-    assert subject_alignment == "TAGGAAATCCAGAGTGTGAATCACT"
+    assert subject_alignment == subject_bases
     assert primer_checker.get_mismatch_positions(query_alignment, subject_alignment, 1, len(primer), primer) == "2"
     assert primer_checker.get_mismatch_details(query_alignment, subject_alignment, 1, len(primer), primer) == "2:G>A"
 
@@ -76,10 +77,10 @@ def test_segment_parsing_supports_standard_and_contig_headers():
 def test_legacy_primer_validation_and_record_conversion():
     library = {
         "Influenza-B": {
-            "triplex_InfB_F_NS": "TCCTCAAYTCACTCTTCGAGCG",
-            "probe-VIC2_HA": "CAGACCAAAATGCACGGGGAAHATACC",
+            "triplex_InfB_F_NS": "CGTACCAYTTTTCTAGTAAAGT",
+            "probe-VIC2_HA": "AGTACCATGGCAGATATGTCGHGGGTC",
         },
-        "RSV-A": {"RSVQA1": "GCTCTTAGCAAAGTCAAGTTGAATGA"},
+        "RSV-A": {"RSVQA1": "TTGGTGGGGCGACAGAAGCCAGGCGG"},
     }
     validation = primer_checker.validate_legacy_primer_library(library)
     assert validation.ok
@@ -103,18 +104,18 @@ def test_normalized_primer_validation_and_record_loading():
         "database_version": "2026-05-06",
         "schemes": [
             {
-                "scheme_id": "fhi-influenza-b",
-                "display_name": "FHI Influenza B",
+                "scheme_id": "dummy-influenza-b",
+                "display_name": "Dummy Influenza B",
                 "organism": "Influenza-B",
                 "version": "2026-05-06",
                 "status": "current",
-                "source": "FHI",
+                "source": "Dummy",
                 "references": [],
                 "primers": [
                     {
                         "id": "triplex_InfB_F_NS",
                         "name": "triplex_InfB_F_NS",
-                        "sequence": "TCCTCAAYTCACTCTTCGAGCG",
+                        "sequence": "CGTACCAYTTTTCTAGTAAAGT",
                         "role": "forward_primer",
                         "segment": "NS",
                         "gene": "NS",
@@ -135,7 +136,7 @@ def test_normalized_primer_validation_and_record_loading():
     assert record.name == "triplex_InfB_F_NS"
     assert record.segment == "NS"
     assert record.role == "forward_primer"
-    assert record.scheme_id == "fhi-influenza-b"
+    assert record.scheme_id == "dummy-influenza-b"
     assert record.database_version == "2026-05-06"
 
 
@@ -148,18 +149,18 @@ def test_load_primer_records_detects_normalized_json(tmp_path):
                 "database_version": "2026-05-06",
                 "schemes": [
                     {
-                        "scheme_id": "fhi-rsv-a",
-                        "display_name": "FHI RSV-A",
+                        "scheme_id": "dummy-rsv-a",
+                        "display_name": "Dummy RSV-A",
                         "organism": "RSV-A",
                         "version": "2026-05-06",
                         "status": "current",
-                        "source": "FHI",
+                        "source": "Dummy",
                         "references": [],
                         "primers": [
                             {
                                 "id": "RSVQA1",
                                 "name": "RSVQA1",
-                                "sequence": "GCTCTTAGCAAAGTCAAGTTGAATGA",
+                                "sequence": "TTGGTGGGGCGACAGAAGCCAGGCGG",
                                 "role": "primer",
                                 "segment": "",
                                 "gene": "",
@@ -180,7 +181,7 @@ def test_load_primer_records_detects_normalized_json(tmp_path):
 
     assert validation.ok
     assert records["RSV-A"][0].name == "RSVQA1"
-    assert records["RSV-A"][0].scheme_id == "fhi-rsv-a"
+    assert records["RSV-A"][0].scheme_id == "dummy-rsv-a"
 
 
 def test_load_primer_records_supports_panel_bed_sequences(tmp_path):
@@ -204,7 +205,7 @@ def test_load_primer_records_supports_panel_bed_sequences(tmp_path):
                         "organism": "SARS-CoV-2",
                         "technology": "amplicon_ngs",
                         "panel_version": "1.0",
-                        "source": "FHI",
+                        "source": "Dummy",
                         "reference": {"name": "MN908947.3", "coordinate_system": "0-based BED"},
                         "files": {"bed": "panels/sars2-ngs-v1/amplicons.bed"},
                         "mapping": {"pool_from_bed_field": 4},
@@ -248,7 +249,7 @@ def test_load_primer_records_supports_panel_fasta_with_amplicon_bed_mapping(tmp_
                         "organism": "SARS-CoV-2",
                         "technology": "amplicon_ngs",
                         "panel_version": "1.0",
-                        "source": "FHI",
+                        "source": "Dummy",
                         "reference": {"name": "MN908947.3", "coordinate_system": "0-based BED"},
                         "files": {
                             "bed": "panels/sars2-ngs-v1/amplicons.bed",
@@ -292,15 +293,15 @@ def test_load_primer_records_supports_mixed_pcr_schemes_and_ngs_panels(tmp_path)
                 "database_version": "2026-05-21",
                 "schemes": [
                     {
-                        "scheme_id": "fhi-sars-cov-2-pcr",
-                        "display_name": "FHI SARS-CoV-2 PCR",
+                        "scheme_id": "dummy-sars-cov-2-pcr",
+                        "display_name": "Dummy SARS-CoV-2 PCR",
                         "organism": "SARS-CoV-2",
                         "version": "2026-05-21",
                         "primers": [
                             {
                                 "id": "triplex_SC2_F",
                                 "name": "triplex_SC2_F",
-                                "sequence": "CTGCAGATTTGGATGATTTCTCC",
+                                "sequence": "CATATGAATTGAGGCAGAACGGT",
                                 "role": "forward_primer",
                                 "segment": "",
                             }
@@ -325,7 +326,7 @@ def test_load_primer_records_supports_mixed_pcr_schemes_and_ngs_panels(tmp_path)
 
     assert validation.ok
     by_name = {record.name: record for record in records["SARS-CoV-2"]}
-    assert by_name["triplex_SC2_F"].scheme_id == "fhi-sars-cov-2-pcr"
+    assert by_name["triplex_SC2_F"].scheme_id == "dummy-sars-cov-2-pcr"
     assert by_name["ngs_LEFT"].scheme_id == "sars2-ngs-v1"
     assert by_name["ngs_LEFT"].pool == "1"
 
@@ -349,15 +350,15 @@ def test_load_primer_records_supports_virus_organized_pcr_and_ngs(tmp_path):
                         "pcr": {
                             "schemes": [
                                 {
-                                    "scheme_id": "fhi-sars-cov-2-pcr",
-                                    "display_name": "FHI SARS-CoV-2 PCR",
+                                    "scheme_id": "dummy-sars-cov-2-pcr",
+                                    "display_name": "Dummy SARS-CoV-2 PCR",
                                     "organism": "SARS-CoV-2",
                                     "version": "2026-05-21",
                                     "primers": [
                                         {
                                             "id": "triplex_SC2_F",
                                             "name": "triplex_SC2_F",
-                                            "sequence": "CTGCAGATTTGGATGATTTCTCC",
+                                            "sequence": "CATATGAATTGAGGCAGAACGGT",
                                             "role": "forward_primer",
                                             "segment": "",
                                         }
@@ -387,76 +388,56 @@ def test_load_primer_records_supports_virus_organized_pcr_and_ngs(tmp_path):
 
     assert validation.ok
     by_name = {record.name: record for record in records["SARS-CoV-2"]}
-    assert by_name["triplex_SC2_F"].scheme_id == "fhi-sars-cov-2-pcr"
+    assert by_name["triplex_SC2_F"].scheme_id == "dummy-sars-cov-2-pcr"
     assert by_name["ngs_LEFT"].scheme_id == "sars2-ngs-v1"
     assert by_name["ngs_LEFT"].pool == "1"
 
 
-def test_unified_fhi_database_loads_all_sources_without_duplicate_record_keys():
+def test_dummy_database_loads_unique_pcr_ngs_and_influenza_records():
     repo_root = Path(__file__).resolve().parents[1]
-    primer_db = repo_root / "primer_db" / "fhi_primers.unified.json"
-
-    records, validation = primer_checker.load_primer_records(str(primer_db))
-
+    records, validation = primer_checker.load_primer_records(str(repo_root / "primer_db/dummy_primers.json"))
     assert validation.ok
-    assert {organism: len(rows) for organism, rows in records.items()} == {
-        "SARS-CoV-2": 268,
-        "Influenza-A": 11,
-        "Influenza-B": 7,
-        "RSV-A": 3,
-        "RSV-B": 3,
-    }
-    all_keys = [
-        (record.organism, record.scheme_id, record.name)
-        for organism_records in records.values()
-        for record in organism_records
-    ]
-    assert len(all_keys) == len(set(all_keys))
-    sars2_scheme_ids = {record.scheme_id for record in records["SARS-CoV-2"]}
-    assert sars2_scheme_ids == {"fhi-sars-cov-2", "sars2-ngs-v5.4.2", "sars2-ngs-vmidt-2.2"}
-
-    virus_type, ngs_records = primer_checker.select_primer_records(
-        records, "sars-cov-2", None, assay_type="ngs", assay_id="sars2-ngs-vmidt-2.2"
-    )
-    assert virus_type == "SARS-CoV-2"
-    assert len(ngs_records) == 68
-    assert {record.assay_type for record in ngs_records} == {"ngs"}
-    assert {record.scheme_id for record in ngs_records} == {"sars2-ngs-vmidt-2.2"}
-
-    _virus_type, pcr_records = primer_checker.select_primer_records(records, "SARS-CoV-2", None, assay_type="pcr")
-    assert len(pcr_records) == 3
-    assert {record.assay_type for record in pcr_records} == {"pcr"}
+    assert not validation.warnings
+    assert {organism: len(rows) for organism, rows in records.items()} == {"Demo-virus": 5, "Influenza-A": 8}
+    all_records = [p for group in records.values() for p in group]
+    assert len({(p.organism, p.scheme_id, p.name) for p in all_records}) == len(all_records)
+    assert all(p.name.startswith("DUMMY_") and p.assay_name.startswith("DUMMY") for p in all_records)
+    assert {p.database_version for p in all_records} == {"dummy-1.0"}
+    for kind, count in [("pcr", 3), ("ngs", 2)]:
+        virus, selected = primer_checker.select_primer_records(records, "Demo-virus", None, assay_type=kind)
+        assert virus == "Demo-virus"
+        assert len(selected) == count
+        assert {p.assay_type for p in selected} == {kind}
+    assert {p.segment for p in records["Influenza-A"]} == {"PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"}
 
 
-def test_panel_database_example_loads_vmidt_bed_with_separate_primer_fasta():
+def test_dummy_panel_database_loads_bed_with_separate_primer_fasta():
     repo_root = Path(__file__).resolve().parents[1]
-    primer_db = repo_root / "primer_db" / "assets" / "panel_database.example.json"
-
-    records, validation = primer_checker.load_primer_records(str(primer_db))
-
+    records, validation = primer_checker.load_primer_records(str(repo_root / "primer_db/assets/panel_database.example.json"))
     assert validation.ok
-    vmidt_records = [record for record in records["SARS-CoV-2"] if record.scheme_id == "sars2-ngs-vmidt-2.2"]
-    assert len(vmidt_records) == 68
-    by_name = {record.name: record for record in vmidt_records}
-    assert by_name["nCoV-2019_1_LEFT"].sequence == "ACCAACCAACTTTCGATCTCTTGT"
-    assert by_name["nCoV-2019_1_LEFT"].pool == "1"
-    assert by_name["nCoV-2019_1_LEFT"].start == "30"
-    assert by_name["nCoV-2019_1_LEFT"].end == "54"
-    assert by_name["nCoV-2019_1_LEFT"].source_file == "SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.primers.fasta"
+    assert len(records["Demo-virus"]) == 2
+    by_name = {p.name: p for p in records["Demo-virus"]}
+    left = by_name["DUMMY_LEFT"]
+    assert left.sequence == "GTCAGACATCGATGCTACGTCAGGATCGTACCTAGCTGAC"
+    assert left.pool == "1"
+    assert left.start == "0"
+    assert left.end == str(len(left.sequence))
+    assert left.source_file == "dummy/primers.fasta"
+    assert by_name["DUMMY_RIGHT"].role == "reverse_primer"
 
 
 def test_legacy_to_normalized_conversion_preserves_names_and_sequences():
     legacy = {
         "Influenza-B": {
-            "triplex_InfB_F_NS": "TCCTCAAYTCACTCTTCGAGCG",
-            "probe-VIC2_HA": "CAGACCAAAATGCACGGGGAAHATACC",
+            "triplex_InfB_F_NS": "CGTACCAYTTTTCTAGTAAAGT",
+            "probe-VIC2_HA": "AGTACCATGGCAGATATGTCGHGGGTC",
         }
     }
 
     normalized = primer_checker.legacy_library_to_normalized_database(
         legacy,
         database_version="2026-05-06",
-        source="FHI",
+        source="Dummy",
     )
 
     assert normalized["schema_version"] == "1.0"
@@ -473,9 +454,9 @@ def test_influenza_subtype_selection_includes_h1_and_m_but_not_h3():
     records = primer_checker.legacy_library_to_records(
         {
             "Influenza-A": {
-                "triplex_INFA_F1_M": "CAAGACCAATCYTGTCACCTCTGAC",
-                "H3_F_HA": "AAGCATTCCYAATGACAAACC",
-                "FluSw-H1-F236_HA": "TGGGAAATCCAGAGTGTGAATCACT",
+                "triplex_INFA_F1_M": "GGCTTGGAAACYTCCTTCTACCCGC",
+                "H3_F_HA": "TCCTTTCAGYACGAGATAATC",
+                "FluSw-H1-F236_HA": "TTCCGGTTATACGCTAGACTGAAGC",
             }
         }
     )
@@ -616,7 +597,7 @@ def test_process_fasta_filters_influenza_b_ns_records(monkeypatch, tmp_path):
     primer = primer_checker.PrimerRecord(
         organism="Influenza-B",
         name="triplex_InfB_F_NS",
-        sequence="TCCTCAAYTCACTCTTCGAGCG",
+        sequence="CGTACCAYTTTTCTAGTAAAGT",
         segment="NS",
     )
     monkeypatch.setattr(primer_analysis, "run_blastn", lambda *_args, **_kwargs: {})
@@ -722,7 +703,7 @@ def test_html_report_contains_embedded_filterable_data_and_escapes_values():
                 "Fasta_File": "example.fasta",
                 "Virus_Type": "Influenza-B",
                 "Primer_Name": "triplex_InfB_F_NS",
-                "Primer_Sequence": "TCCTCAAYTCACTCTTCGAGCG",
+                "Primer_Sequence": "CGTACCAYTTTTCTAGTAAAGT",
                 "Primer_Segment": "NS",
                 "Subject_Sequence_ID": "sample</script><b>",
                 "Subject_Segment": "NS",
@@ -739,7 +720,7 @@ def test_html_report_contains_embedded_filterable_data_and_escapes_values():
                 "Bitscore": 40,
                 "Mismatch_Positions": "7",
                 "Mismatch_Details": "7:A>G",
-                "Query_Alignment": "TCCTCAAYTCACTCTTCGAGCG",
+                "Query_Alignment": "CGTACCAYTTTTCTAGTAAAGT",
                 "Subject_Alignment": "TCCTCAGYTCACTCTTCGAGCG",
                 "Metadata_Sample_ID": "sample-1",
                 "Sample_Date": "2025-01-01",
@@ -757,7 +738,7 @@ def test_html_report_contains_embedded_filterable_data_and_escapes_values():
                         "Fasta_File": "old.fasta",
                         "Virus_Type": "Influenza-B",
                         "Primer_Name": "triplex_InfB_F_NS",
-                        "Primer_Sequence": "TCCTCAAYTCACTCTTCGAGCG",
+                        "Primer_Sequence": "CGTACCAYTTTTCTAGTAAAGT",
                         "Primer_Segment": "NS",
                         "Subject_Sequence_ID": "old-sample",
                         "Subject_Segment": "NS",

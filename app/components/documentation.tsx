@@ -208,7 +208,7 @@ export default function Documentation() {
         <h3>{t("Uploads and reproducibility")}</h3>
         <p>
           {t(
-            "Use public or anonymized consensus FASTA sequences. Select the reference database, upload a self-contained JSON library, or build and download your own database. The preflight check validates file sizes and workload before Analyze is enabled; the server repeats those checks during analysis. Large workloads should use the CLI.",
+            "The bundled dummy database contains invented sequences for software testing only. Use the synthetic FASTA example to try it. For your own analysis, upload a self-contained JSON library or build and download your own database. The preflight check validates file sizes and workload before Analyze is enabled; the server repeats those checks during analysis. Large workloads should use the CLI.",
           )}
         </p>
         <p>

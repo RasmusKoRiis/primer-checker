@@ -22,7 +22,7 @@ The canonical output is a CSV report that can be visualized with tools like Powe
 - `report_text/`: editable English and Norwegian wording used in the HTML report.
 - `primer_checker.py`: command-line entrypoint and compatibility import surface.
 - `scripts/run_primer_checker_batch.py`: batch runner for mixed FASTA folders.
-- `primer_db/`: primer databases. `primer_db/fhi_primers.unified.json` is the preferred FHI database, organized by virus with PCR schemes and NGS panels separated.
+- `primer_db/`: clearly labelled synthetic test databases. `primer_db/dummy_primers.json` is the website default; no real assay library is bundled.
 - `fixtures/`: small test data and metadata examples.
 - `docs/`: maintenance notes and implementation plans.
 - `result/`: local generated CSV/HTML outputs.
@@ -61,109 +61,43 @@ After saving, rerun the normal primer-checker command to generate a new HTML rep
 
 ## Sample Primer Library (`primers.json`)
 
+All examples shipped here are **dummy data for software testing only**, not validated assays.
+The self-contained [dummy database](primer_db/dummy_primers.json) can be downloaded
+from the website and uploaded again. It contains three synthetic PCR oligos,
+two NGS oligos, and eight synthetic influenza segment examples. The influenza
+organism and subtype labels demonstrate routing; the sequences are invented.
+
 Legacy format:
 
 ```json
-{
-  "SARS-CoV-2": {
-    "Primer_1": "CTGCAGATTTGGATGATTTCTCC"
-  },
-  "Influenza-A": {
-    "Primer1": "CAAGACCAATCYTGTCACCTCTGAC"
-  },
-  "Influenza-B": {
-    "Primer1": "AGACCAGAGGGAAACTATGCCC"
-  },
-  "RSV-A": {
-    "Primer1": "GACCRATCCTGTCACCTCTGAC"
-  },
-  "RSV-B": {
-    "Primer1": "GACCRATCCTGTCACCTCTGAC"
-  }
-}
+{"Demo-virus": {"DUMMY_F": "GTCAGACATCGATGCTACGTCAGGATCGTACCTAGCTGAC"}}
 ```
 
-Normalized format:
+Normalized format (accepted by the website and CLI):
 
 ```json
 {
   "schema_version": "1.0",
-  "database_version": "2026-05-06",
-  "schemes": [
-    {
-      "scheme_id": "fhi-influenza-b",
-      "display_name": "FHI Influenza-B primers",
-      "organism": "Influenza-B",
-      "version": "2026-05-06",
-      "status": "current",
-      "source": "FHI",
-      "references": [],
-      "primers": [
-        {
-          "id": "triplex_InfB_F_NS",
-          "name": "triplex_InfB_F_NS",
-          "sequence": "TCCTCAAYTCACTCTTCGAGCG",
-          "role": "forward_primer",
-          "segment": "NS",
-          "gene": "NS",
-          "pool": "triplex",
-          "strand": "",
-          "subtype_tags": [],
-          "notes": ""
-        }
-      ]
-    }
-  ]
+  "database_version": "dummy-1.0",
+  "purpose": "synthetic-test-only",
+  "schemes": [{
+    "scheme_id": "dummy-pcr",
+    "display_name": "DUMMY — PCR example",
+    "organism": "Demo-virus",
+    "version": "dummy-1.0",
+    "assay_type": "pcr",
+    "primers": [{
+      "id": "DUMMY_F", "name": "DUMMY_F",
+      "sequence": "GTCAGACATCGATGCTACGTCAGGATCGTACCTAGCTGAC",
+      "role": "forward_primer", "segment": "", "subtype_tags": []
+    }]
+  }]
 }
 ```
 
-Preferred virus-organized format with PCR schemes and BED/FASTA-backed NGS panels:
-
-```json
-{
-  "schema_version": "3.0",
-  "database_version": "2026-05-21",
-  "viruses": [
-    {
-      "organism": "SARS-CoV-2",
-      "pcr": {
-        "schemes": [
-          {
-            "scheme_id": "fhi-sars-cov-2",
-            "display_name": "FHI SARS-CoV-2 primers",
-            "organism": "SARS-CoV-2",
-            "version": "2026-05-06",
-            "primers": []
-          }
-        ]
-      },
-      "ngs": {
-        "panels": [
-          {
-            "panel_id": "sars2-ngs-vmidt-2.2",
-            "display_name": "SARS-CoV-2 VMIDT 2.2 NGS Panel",
-            "organism": "SARS-CoV-2",
-            "technology": "amplicon_ngs",
-            "panel_version": "VMIDT.2.2",
-            "reference": {
-              "name": "NC_045512.2",
-              "coordinate_system": "0-based BED"
-            },
-            "files": {
-              "bed": "assets/SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.scheme.bed",
-              "primers_fasta": "assets/SARS-CoV-2/VMIDT.2.2/SARS-CoV-2.primers.fasta"
-            },
-            "mapping": {
-              "bed_name_field": "name",
-              "pool_from_bed_field": 4
-            }
-          }
-        ]
-      }
-    }
-  ]
-}
-```
+The CLI also accepts virus-organized schema `3.0` databases and external
+BED/FASTA panel assets. See the entirely synthetic
+[panel example](primer_db/assets/panel_database.example.json).
 
 The same database JSON can contain PCR primer `schemes[]` and NGS `panels[]`. The `files` paths are resolved relative to the JSON database file. A panel can load primer sequences from an ARTIC-style primer BED with sequence in column 7, from `primers_fasta`, or from both. When both are present, the FASTA sequence is used for matching and matching BED rows provide pool, strand, coordinate, and reference metadata. BED field numbers in `mapping` are zero-based, so `pool_from_bed_field: 4` reads the fifth BED column.
 
@@ -171,11 +105,11 @@ Use `--assay-type pcr` or `--assay-type ngs` to select a technology. Use `--assa
 
 ```bash
 python3 primer_checker.py \
-  --primers primer_db/fhi_primers.unified.json \
-  --virus SARS-CoV-2 \
+  --primers primer_db/dummy_primers.json \
+  --virus Demo-virus \
   --assay-type ngs \
-  --assay-id sars2-ngs-vmidt-2.2 \
-  --fasta sample.fasta \
+  --assay-id dummy-ngs \
+  --fasta public/example.fasta \
   --output primer_report.csv
 ```
 
@@ -202,7 +136,7 @@ Attach sample metadata to the CSV and HTML report:
 
 ```bash
 python3 primer_checker.py \
-  --primers primer_db/fhi_primers.normalized.json \
+  --primers /path/to/my-primers.json \
   --virus RSV-A \
   --fasta file1.fasta \
   --metadata-csv fixtures/fake_metadata.csv \
@@ -220,10 +154,10 @@ Convert a legacy primer database to normalized JSON:
 
 ```bash
 python3 scripts/convert_legacy_primers.py \
-  --input /path/to/fhi_primers.json \
-  --output primer_db/fhi_primers.normalized.json \
+  --input /path/to/legacy-primers.json \
+  --output /path/to/my-primers.json \
   --database-version 2026-05-06 \
-  --source FHI
+  --source "Your laboratory"
 ```
 
 Run a folder of mixed FASTA files by filename and write combined CSV and HTML reports:
@@ -231,7 +165,7 @@ Run a folder of mixed FASTA files by filename and write combined CSV and HTML re
 ```bash
 python3 scripts/run_primer_checker_batch.py \
   --input-folder /path/to/fasta_folder \
-  --primers primer_db/fhi_primers.normalized.json \
+  --primers /path/to/my-primers.json \
   --metadata-csv fixtures/fake_metadata.csv \
   --output batch_primer_report.csv \
   --html-report batch_primer_report.html
@@ -242,7 +176,7 @@ Only run primer analysis and skip the HTML report:
 ```bash
 python3 scripts/run_primer_checker_batch.py \
   --input-folder /path/to/fasta_folder \
-  --primers primer_db/fhi_primers.normalized.json \
+  --primers /path/to/my-primers.json \
   --output batch_primer_report.csv \
   --analysis-only
 ```
@@ -263,7 +197,7 @@ Check how filenames will be routed before running BLAST:
 ```bash
 python3 scripts/run_primer_checker_batch.py \
   --input-folder /path/to/fasta_folder \
-  --primers primer_db/fhi_primers.normalized.json \
+  --primers /path/to/my-primers.json \
   --dry-run
 ```
 
@@ -367,7 +301,7 @@ For all influenza subtype runs, primer selection is based on database metadata. 
 
 ### Loading the Primer Library
 - The script loads the primer sets from the provided JSON file.
-- Supported database formats are the legacy shape `{organism: {primer_name: sequence}}`, flat `schemes[]` / `panels[]` databases, and the preferred virus-organized `viruses[]` database used by `primer_db/fhi_primers.unified.json`.
+- Supported database formats are the legacy shape `{organism: {primer_name: sequence}}`, flat `schemes[]` / `panels[]` databases, and virus-organized `viruses[]` databases. The bundled dummy database uses self-contained `schemes[]`.
 - Legacy primer records are converted internally to structured primer records with inferred segment and role metadata where possible.
 - Normalized records use explicit metadata where available.
 - Panel records load primer sequences from BED or FASTA assets and keep panel ID, panel version, pool, strand, reference, and coordinate metadata internally. In the virus-organized database, PCR records live under `pcr.schemes[]` and NGS panels live under `ngs.panels[]` for each organism.
@@ -506,13 +440,35 @@ wording. Website-specific text is localized in `app/lib/norwegian.json`, using
 English phrases as keys and preserving `{placeholder}` names. Unrecognized
 technical API diagnostics fall back to their original wording.
 
+### Bundled dummy database
+
+The default is **dummy-1.0**, a synthetic software test set, independent of any
+real primer database. Choose **Use a synthetic example** to load two artificial
+FASTA records: PCR gives six hits and one mismatch (`9:T>A`). The reverse primer
+binds the opposite strand. **Download dummy database** saves the matching JSON.
+NGS mode uses two invented oligos against the same example (four hits, one mismatch).
+For influenza routing, use `primer_db/dummy-influenza.fasta` with the dummy
+influenza scheme. No biological performance is implied by these examples.
+
+The site labels dummy data in English/Norwegian before analysis and in results.
+Web CSV exports include `Database_Purpose=synthetic-test-only`; provenance records
+`is_dummy: true`, and HTML downloads carry a visible bilingual dummy-data notice.
+The JSON's `purpose` marker preserves that label when the dummy database is uploaded.
+Remove this marker when replacing all example sequences with your own real library.
+For your own analyses, upload or build your own primer database. There is no
+runtime dependency on an external GitHub primer library.
+
+The former library, panel assets, archive and saved report were removed from
+this branch's current files. Earlier Git commits and other branches/deployments
+may still contain them; this change does not rewrite Git history.
+
 ### Your own primer database
 
 Choose **Upload JSON** to use a self-contained primer database for this analysis.
 The web accepts legacy `{organism: {primer_name: sequence}}` dictionaries and
 normalized schema `1.0` databases with inline `schemes[].primers[]` sequences.
 Existing files that reference BED/FASTA assets (`panels[]` or `viruses[]`) remain
-supported by the CLI and the installed reference library, not by public uploads.
+supported by the CLI and an operator-installed database, not by public uploads.
 
 Choose **Build a database**, enter a name, organism, version, PCR/NGS type, and
 primer names/sequences (5′ → 3′), then **Create database**. Add primers with
@@ -546,7 +502,7 @@ python primer_checker.py --primers custom-primers.json --virus SARS-CoV-2 \
 Exported schemes use optional `assay_type: "pcr" | "ngs"`; omitted values retain
 the original PCR behavior. This supports self-contained NGS primer lists without
 external BED assets. Database uploads are limited to 250,000 bytes, 500 primers,
-and 200 bases per primer. They never replace the reference database and are not
+and 200 bases per primer. They never replace the installed database and are not
 saved on the server. The result provenance records the uploaded filename, its
 file hash, and the fingerprint of the primer records actually used. Download
 both the custom database and results if you need to reproduce an analysis later.

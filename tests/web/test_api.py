@@ -32,11 +32,50 @@ def post(client, data=None, content=None, name="SARS.fasta", metadata=None):
     return client.post("/api/analyze", data=data or {"virus": "SARS-CoV-2", "assay_type": "pcr"}, files=files)
 
 
-def test_catalog_matches_real_database(client):
+def test_catalog_matches_configured_database(client):
     response = client.get("/api/catalog")
     assert response.status_code == 200
     assert "influenza" in [v["id"] for v in response.json()["viruses"]]
     assert len(response.json()["database"]["sha256"]) == 64
+    assert response.json()["database"]["is_dummy"] is False
+    assert service.DUMMY_NOTICE not in response.json()["warnings"]
+
+
+@pytest.mark.skipif(not shutil.which("blastn"), reason="BLAST+ integration requires blastn")
+@pytest.mark.parametrize("uploaded", [False, True])
+@pytest.mark.parametrize("assay_type,count", [("pcr", 6), ("ngs", 4)])
+def test_dummy_example_and_downloads_are_labelled(client, monkeypatch, uploaded, assay_type, count):
+    monkeypatch.delenv("PRIMER_DATABASE_PATH")
+    files = [("files", ("example.fasta", (ROOT / "public/example.fasta").read_bytes()))]
+    if uploaded:
+        files.append(("database", ("dummy.json", (ROOT / "primer_db/dummy_primers.json").read_bytes())))
+        catalog = client.post("/api/database", files=[files[-1]]).json()
+    else:
+        catalog = client.get("/api/catalog").json()
+    assert catalog["database"]["is_dummy"] is True
+    assert catalog["database"]["version"] == "dummy-1.0"
+    assert service.DUMMY_NOTICE in catalog["warnings"]
+    selection = {"virus": "Demo-virus", "assay_type": assay_type}
+    preflight = client.post("/api/preflight", data=selection, files=files)
+    assert preflight.status_code == 200, preflight.text
+    assert service.DUMMY_NOTICE in preflight.json()["warnings"]
+    response = client.post("/api/analyze", data=selection, files=files)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["summary"]["comparisons"] == count
+    assert result["summary"]["hits"] == count
+    assert result["summary"]["mismatch_comparisons"] == 1
+    assert [r["Mismatch_Details"] for r in result["rows"] if r["Mismatches"]] == ["9:T>A"]
+    reverse = [r for r in result["rows"] if r["Primer_Name"] in {"DUMMY_R", "DUMMY_RIGHT"}]
+    assert len(reverse) == 2
+    assert all(r["Subject_Start"] > r["Subject_End"] and r["Mismatches"] == 0 for r in reverse)
+    assert service.DUMMY_NOTICE in result["warnings"]
+    manifest = json.loads(result["downloads"]["manifest"])
+    assert manifest["database"]["is_dummy"] is True
+    assert manifest["database"]["source"] == ("uploaded" if uploaded else "bundled")
+    assert {r["Database_Purpose"] for r in csv.DictReader(io.StringIO(result["downloads"]["csv"]))} == {"synthetic-test-only"}
+    assert "DUMMY DATA / TESTDATA" in result["downloads"]["html"]
+    assert "Testdatabase — syntetiske sekvenser" in result["downloads"]["html"]
 
 
 @pytest.mark.skipif(not shutil.which("blastn"), reason="BLAST+ integration requires blastn")
@@ -292,7 +331,7 @@ def simulated_blast(monkeypatch):
     monkeypatch.setattr(engine, "run_blastn", lambda *a, **k: {})
 
 
-@pytest.mark.parametrize("subtype", ["A", "H1", "H3", "B"])
+@pytest.mark.parametrize("subtype", ["A", "H1", "H5N1"])
 def test_influenza_subtypes_use_canonical_selection(client, monkeypatch, simulated_blast, subtype):
     monkeypatch.delenv("PRIMER_DATABASE_PATH")
     response = post(
@@ -310,14 +349,14 @@ def test_influenza_subtypes_use_canonical_selection(client, monkeypatch, simulat
 @pytest.mark.parametrize(
     "assay_type,assay_id,count",
     [
-        ("pcr", "fhi-sars-cov-2", 3),
-        ("ngs", "sars2-ngs-vmidt-2.2", 68),
-        ("all", None, 268),
+        ("pcr", "dummy-pcr", 3),
+        ("ngs", "dummy-ngs", 2),
+        ("all", None, 5),
     ],
 )
 def test_pcr_ngs_and_all_selection(client, monkeypatch, simulated_blast, assay_type, assay_id, count):
     monkeypatch.delenv("PRIMER_DATABASE_PATH")
-    selection = {"virus": "SARS-CoV-2", "assay_type": assay_type}
+    selection = {"virus": "Demo-virus", "assay_type": assay_type}
     if assay_id:
         selection["assay_id"] = assay_id
     response = post(client, selection)

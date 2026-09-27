@@ -1,5 +1,10 @@
 # Primer Checker Improvement Plan
 
+> Historical planning notes from before the web application. References to the
+> old external primer library describe that earlier state. The current repository
+> ships only synthetic dummy data; see `primer_db/README.md`.
+
+
 This is a living investigation plan. It records observations before implementation work. The external data and primer database folders were inspected read-only.
 
 ## 1. Current understanding

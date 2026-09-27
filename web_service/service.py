@@ -30,6 +30,7 @@ MAX_COMPARISONS = 2000
 MAX_BLAST_CALLS = 300
 MAX_BASE_COMPARISONS = 50_000_000
 ANALYSIS_SECONDS = 240
+DUMMY_NOTICE = "Dummy database — synthetic sequences for software testing only. Upload or build your own database for your analysis."
 
 
 class WebError(Exception):
@@ -39,7 +40,7 @@ class WebError(Exception):
 
 
 def database_path() -> Path:
-    return Path(os.environ.get("PRIMER_DATABASE_PATH", ROOT / "primer_db/fhi_primers.unified.json"))
+    return Path(os.environ.get("PRIMER_DATABASE_PATH", ROOT / "primer_db/dummy_primers.json"))
 
 
 def load_database(upload: tuple[str, bytes] | None = None):
@@ -49,12 +50,14 @@ def load_database(upload: tuple[str, bytes] | None = None):
             raise WebError("Custom databases must be at most 250 kB.", "database_too_large", 413)
         try:
             records, validation = databases.load_uploaded(upload[1])
+            raw_database = json.loads(upload[1].decode("utf-8-sig"))
         except ValueError as exc:
             raise WebError(str(exc), "invalid_database") from None
         source = {"source": "uploaded", "filename": name, "file_sha256": hashlib.sha256(upload[1]).hexdigest()}
     else:
         try:
             records, validation = engine.load_primer_records(str(database_path()))
+            raw_database = json.loads(database_path().read_text(encoding="utf-8-sig"))
         except (SystemExit, Exception):  # noqa: BLE001 - never expose local database paths
             raise WebError(
                 "The primer database could not be loaded. Contact the deployment maintainer.", "database_error", 503
@@ -70,6 +73,8 @@ def load_database(upload: tuple[str, bytes] | None = None):
         {
             "version": ", ".join(versions) or "unversioned",
             "sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+            "is_dummy": raw_database.get("purpose") == "synthetic-test-only",
+            "purpose": "synthetic-test-only" if raw_database.get("purpose") == "synthetic-test-only" else "unspecified",
             **source,
         },
         validation,
@@ -116,9 +121,10 @@ def catalog(upload: tuple[str, bytes] | None = None) -> dict:
         "database": database,
         "viruses": viruses,
         "assays": list(assays.values()),
-        "warnings": validation.warnings
-        if upload
-        else (["The reference database has validation warnings."] if validation.warnings else []),
+        "warnings": ([DUMMY_NOTICE] if database["is_dummy"] else []) + (
+            validation.warnings if upload
+            else (["The installed database has validation warnings."] if validation.warnings else [])
+        ),
         "limits": {
             "upload_bytes": MAX_UPLOAD_BYTES,
             "files": MAX_FILES,
@@ -269,7 +275,7 @@ def prepare_analysis(
         raise WebError(
             "This selection includes too many BLAST searches. Select one assay or fewer files.", "work_limit", 413
         )
-    warnings = []
+    warnings = [DUMMY_NOTICE] if database["is_dummy"] else []
     if validation.warnings:
         warnings.append(
             "The primer database has validation warnings; the maintainer should review it with --validate-primers."
@@ -422,6 +428,7 @@ def analyze(files, metadata, virus, flu_type, assay_type, assay_id, database_upl
         "Application_Version": APP_VERSION,
         "Database_Version": database["version"],
         "Database_SHA256": database["sha256"],
+        "Database_Purpose": database["purpose"],
         "Git_Commit": manifest["git_commit"],
         "Selection_JSON": json.dumps(manifest["selection"], sort_keys=True),
         "BLAST_Config_JSON": json.dumps(manifest["blast"], sort_keys=True),
@@ -435,6 +442,14 @@ def analyze(files, metadata, virus, flu_type, assay_type, assay_id, database_upl
     ]
     engine.write_csv_rows(csv_rows, csv_stream, extra_fieldnames=tuple(provenance_columns))
     report_html = primer_report.build_html_report(rows)
+    if database["is_dummy"]:
+        notice = (
+            '<aside role="note" style="margin:24px;padding:16px;border:2px solid #b47719;background:#fff5dc;color:#442d10">'
+            '<strong>DUMMY DATA / TESTDATA</strong><p>' + html.escape(DUMMY_NOTICE) + '</p>'
+            '<p lang="nb">Testdatabase — syntetiske sekvenser kun for testing av programvaren. '
+            'Last opp eller bygg din egen database for analysen din.</p></aside>'
+        )
+        report_html = report_html.replace("<body>", "<body>" + notice, 1)
     manifest_json = json.dumps(manifest, indent=2)
     provenance = (
         '<details style="margin:24px"><summary>Analysis provenance</summary><pre>'

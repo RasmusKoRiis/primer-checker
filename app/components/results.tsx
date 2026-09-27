@@ -470,7 +470,10 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             {m.selection.assay_id || t("all matching assays")}
           </dd>
           <dt>{t("Database source")}</dt>
-          <dd>{m.database.filename || t("Reference library")}</dd>
+          <dd>
+            {m.database.filename ||
+              t(m.database.is_dummy ? "Dummy database" : "Installed database")}
+          </dd>
           <dt>{t("Database SHA-256")}</dt>
           <dd className="mono">{m.database.sha256}</dd>
           <dt>{t("Git commit")}</dt>
