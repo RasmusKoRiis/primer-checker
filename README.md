@@ -114,6 +114,12 @@ python3 primer_checker.py \
 ```
 
 ## CLI usage
+
+For a complete installation walkthrough, see **[CLI setup with Conda](docs/CLI.md)**.
+The downloadable **[environment.yml](public/environment.yml)** installs Python
+and BLAST+ for macOS or Linux (including Windows through WSL). A setup walkthrough
+is also available in English/Norsk under [Documentation → CLI setup](https://primercheck.rasmuskriis.no/#documentation-cli).
+
 Run the script from the command line with the required parameters. For example:
 
 ```bash

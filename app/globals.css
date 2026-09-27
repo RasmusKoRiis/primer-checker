@@ -1621,6 +1621,11 @@ tbody tr:hover {
 .documentation-section details p {
   margin-top: 12px;
 }
+.cli-setup p a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 @media (max-width: 1000px) {
   .site-controls {
     gap: 18px;

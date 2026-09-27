@@ -3,6 +3,7 @@ import english from "../../report_text/english.json";
 import norwegian from "../../report_text/norwegian.json";
 import { useLanguage } from "./language";
 import { DatabaseFormatHelp, FastaFormatHelp } from "./input-format-help";
+import CliSetup from "./cli-setup";
 
 type ReportKey = keyof typeof english;
 export default function Documentation() {
@@ -27,6 +28,7 @@ export default function Documentation() {
       >
         <a href="#documentation-fasta">{t("FASTA headers")}</a>
         <a href="#documentation-database">{t("Primer database format")}</a>
+        <a href="#documentation-cli">{t("CLI setup")}</a>
         <a href="#documentation-method">{report.doc_workflow_title}</a>
         <a href="#documentation-web">{t("Website results")}</a>
         <a href="#documentation-html">{t("Downloaded HTML report")}</a>
@@ -44,6 +46,7 @@ export default function Documentation() {
         <h2>{t("Primer database format")}</h2>
         <DatabaseFormatHelp expanded />
       </section>
+      <CliSetup />
       <section className="card documentation-section" id="documentation-method">
         <h2>{report.doc_workflow_title}</h2>
         <p>
