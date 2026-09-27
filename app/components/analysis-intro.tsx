@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowDown, ArrowUpRight } from "./pixel-icons";
 import { useLanguage } from "./language";
+import FocusHeadline from "./focus-headline";
 
 export default function AnalysisIntro() {
   const { t } = useLanguage();
@@ -12,26 +12,16 @@ export default function AnalysisIntro() {
           <span />
           {t("CONSENSUS SEQUENCE ANALYSIS")}
         </div>
-        <h1 id="intro-title">
-          <span>{t("Every base.")}</span>
-          <span>{t("In focus.")}</span>
-        </h1>
+        <FocusHeadline
+          firstLine={t("Every base.")}
+          secondLine={t("In focus.")}
+        />
         <div className="intro-summary">
           <p>
             {t(
               "Evaluate PCR and sequencing primer compatibility against viral consensus sequences.",
             )}
           </p>
-          <div className="intro-links">
-            <a className="intro-start" href="#analysis-workspace">
-              {t("Start an analysis")}
-              <ArrowDown size={16} />
-            </a>
-            <a className="intro-guide" href="#documentation-method">
-              {t("Explore the method")}
-              <ArrowUpRight size={16} />
-            </a>
-          </div>
         </div>
       </div>
     </section>

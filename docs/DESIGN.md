@@ -41,3 +41,11 @@ the translated button text and live status explain that analysis is running.
 
 Keep the opening section text-only and the working area compact. Maintain the
 English/Norwegian layout, visible dummy-data notices, and readable result colors.
+
+The headline resolves from coarse pixels to sharp text over 1.85 seconds on
+entry. One coral letter in “base” stays coarse a little longer and is briefly
+outlined to suggest finding a hidden mismatch. A small canvas overlay draws
+seven resolution steps; the actual heading remains native, selectable,
+accessible text. Motion stops on resize, tab hiding or reduced-motion changes,
+and reduced-motion users see sharp text immediately. There are no duplicate
+intro links: Analysis and Documentation remain in the header.
