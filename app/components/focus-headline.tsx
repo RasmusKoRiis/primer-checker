@@ -35,8 +35,8 @@ function CyclingBase({ letter }: { letter: string }) {
       overlay.height = source.height = Math.ceil(overlayBox.height);
       const style = getComputedStyle(target);
       const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const mismatchColor = style.getPropertyValue("--accent").trim();
       sourceContext.font = font;
-      sourceContext.fillStyle = style.color;
       const metrics = sourceContext.measureText(letter);
       const size = parseFloat(style.fontSize);
       const ascent = metrics.fontBoundingBoxAscent ?? size * 0.8;
@@ -66,6 +66,8 @@ function CyclingBase({ letter }: { letter: string }) {
         const frame = `${glyph}:${block}`;
         if (frame !== lastFrame) {
           sourceContext.clearRect(0, 0, source.width, source.height);
+          sourceContext.fillStyle =
+            glyph === letter ? style.color : mismatchColor;
           const glyphMetrics = sourceContext.measureText(glyph);
           const inkWidth =
             glyphMetrics.actualBoundingBoxLeft +

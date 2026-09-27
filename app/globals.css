@@ -1845,11 +1845,11 @@ tbody tr:hover {
   display: block;
   white-space: nowrap;
 }
-.focus-line:nth-child(2),
-.focus-mismatch {
+.focus-line:nth-child(2) {
   color: var(--accent);
 }
 .focus-mismatch {
+  color: var(--success);
   position: relative;
   display: inline-block;
   margin-inline-start: 0.075em;
