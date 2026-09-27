@@ -1849,7 +1849,7 @@ tbody tr:hover {
   color: var(--accent);
 }
 .focus-mismatch {
-  color: var(--success);
+  color: inherit;
   position: relative;
   display: inline-block;
   margin-inline-start: 0.075em;
