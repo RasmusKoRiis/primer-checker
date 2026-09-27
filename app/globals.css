@@ -1841,9 +1841,6 @@ tbody tr:hover {
   line-height: 0.98;
   letter-spacing: -0.065em;
 }
-.focus-headline {
-  position: relative;
-}
 .focus-line {
   display: block;
   white-space: nowrap;
@@ -1852,18 +1849,22 @@ tbody tr:hover {
 .focus-mismatch {
   color: var(--accent);
 }
+.focus-mismatch {
+  position: relative;
+  display: inline-block;
+}
 .focus-canvas {
   position: absolute;
-  inset: 0;
+  inset: -0.12em 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% + 0.24em);
   pointer-events: none;
   opacity: 0;
 }
-.focus-headline[data-focusing="true"] .focus-line {
+.focus-mismatch[data-cycling="true"] .focus-letter {
   opacity: 0;
 }
-.focus-headline[data-focusing="true"] .focus-canvas {
+.focus-mismatch[data-cycling="true"] .focus-canvas {
   opacity: 1;
 }
 .intro-summary > p {
@@ -1927,7 +1928,7 @@ tbody tr:hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .focus-headline[data-focusing="true"] .focus-line {
+  .focus-mismatch[data-cycling="true"] .focus-letter {
     opacity: 1;
   }
   .focus-canvas {
