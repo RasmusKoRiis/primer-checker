@@ -1786,23 +1786,23 @@ tbody tr:hover {
 
 /* A compact typographic introduction; the working interface stays below it. */
 .analysis-intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: 64px;
-  align-items: center;
   padding: 0 0 32px;
   margin-bottom: 28px;
   border-bottom: 1px solid var(--line);
 }
 .intro-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 24px 64px;
+  align-items: end;
   padding: 4px 0;
   min-width: 0;
 }
 .intro-kicker {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 22px;
   font:
     10px/1.5 "Courier New",
     monospace;
@@ -1828,9 +1828,8 @@ tbody tr:hover {
   color: #537366;
   animation-delay: 80ms;
 }
-.intro-copy > p {
+.intro-summary > p {
   max-width: 380px;
-  margin-top: 22px;
   font-size: 13px;
   line-height: 1.75;
   text-wrap: pretty;
@@ -1868,62 +1867,6 @@ tbody tr:hover {
 .intro-guide:hover svg {
   transform: translate(2px, -2px);
 }
-.intro-study {
-  min-width: 0;
-  overflow: hidden;
-  background: #e6ecdf;
-  border: 1px solid #d5dece;
-  color: #214a3c;
-}
-.study-topline,
-.study-caption {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 17px;
-  font:
-    9px/1.4 "Courier New",
-    monospace;
-  letter-spacing: 0.7px;
-  color: #53664f;
-}
-.study-topline {
-  border-bottom: 1px solid #d5dece;
-}
-.study-caption {
-  border-top: 1px solid #d5dece;
-}
-.study-caption > span:last-child {
-  text-transform: uppercase;
-  font-size: 8px;
-}
-.study-art {
-  overflow: hidden;
-  height: 246px;
-  display: grid;
-  place-items: center;
-}
-.study-art svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  animation: sequence-in 950ms cubic-bezier(0.2, 0.65, 0.3, 1) both;
-}
-.sequence-type {
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 59px;
-  font-weight: 700;
-  letter-spacing: -3px;
-}
-.sequence-guides {
-  opacity: 0.2;
-}
-.sequence-accent {
-  fill: #a65b40;
-}
-.sequence-center {
-  opacity: 0.5;
-}
 .analysis-heading {
   scroll-margin-top: 100px;
   margin-bottom: 20px;
@@ -1954,19 +1897,9 @@ tbody tr:hover {
     transform: translateY(0);
   }
 }
-@keyframes sequence-in {
-  from {
-    opacity: 0;
-    transform: scale(1.065);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 @media (max-width: 1000px) {
-  .analysis-intro {
-    gap: 30px;
+  .intro-copy {
+    column-gap: 30px;
   }
   .intro-copy h1 {
     font-size: 58px;
@@ -1980,37 +1913,22 @@ tbody tr:hover {
   }
 }
 @media (max-width: 720px) {
-  .analysis-intro {
+  .intro-copy {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 18px;
+  }
+  .analysis-intro {
     padding-bottom: 24px;
     margin-bottom: 24px;
   }
   .intro-copy h1 {
     font-size: clamp(52px, 10vw, 68px);
   }
-  .intro-kicker {
-    margin-bottom: 18px;
-  }
-  .intro-copy > p {
+  .intro-summary > p {
     max-width: 410px;
-    margin-top: 17px;
   }
   .intro-links {
     margin-top: 14px;
-  }
-  .study-art {
-    height: 154px;
-    display: grid;
-    place-items: center;
-  }
-  .study-art svg {
-    height: 100%;
-    width: 100%;
-  }
-  .study-topline,
-  .study-caption {
-    padding: 9px 14px;
   }
   .analysis-heading h2 {
     font-size: 23px;
@@ -2020,8 +1938,7 @@ tbody tr:hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .intro-copy h1 > span,
-  .study-art svg {
+  .intro-copy h1 > span {
     animation: none;
   }
   .intro-links svg {
