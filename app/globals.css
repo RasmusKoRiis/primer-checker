@@ -1857,7 +1857,7 @@ tbody tr:hover {
   color: inherit;
   position: relative;
   display: inline-block;
-  margin-inline-start: 0.075em;
+  margin-inline-start: 0.12em;
 }
 .focus-canvas {
   position: absolute;
