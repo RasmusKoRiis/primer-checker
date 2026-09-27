@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download } from "./pixel-icons";
 import examples from "../lib/input-examples.json";
 import { download } from "../lib/results";
 import { useLanguage } from "./language";
@@ -76,7 +76,7 @@ export function FastaFormatHelp({ expanded = false }: { expanded?: boolean }) {
           download(examples.fasta[kind], `${kind}-template.fasta`, "text/plain")
         }
       >
-        <Download size={14} />
+        <Download size={16} />
         {t("Download FASTA template")}
       </button>
       <p className="format-footnote">
@@ -155,7 +155,7 @@ export function DatabaseFormatHelp({
           download(text, `${kind}-primers.json`, "application/json")
         }
       >
-        <Download size={14} />
+        <Download size={16} />
         {t("Download JSON template")}
       </button>
       <p className="format-footnote">

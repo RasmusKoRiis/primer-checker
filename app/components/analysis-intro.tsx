@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowUpRight } from "./pixel-icons";
 import { useLanguage } from "./language";
 
 export default function AnalysisIntro() {
@@ -29,7 +29,7 @@ export default function AnalysisIntro() {
             </a>
             <a className="intro-guide" href="#documentation-method">
               {t("Explore the method")}
-              <ArrowUpRight size={15} />
+              <ArrowUpRight size={16} />
             </a>
           </div>
         </div>

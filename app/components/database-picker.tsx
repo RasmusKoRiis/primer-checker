@@ -6,11 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   Database,
   Download,
-  LoaderCircle,
+  PixelLoader,
   Plus,
   Trash2,
   Upload,
-} from "lucide-react";
+} from "./pixel-icons";
 import type { Catalog } from "../lib/results";
 import { download } from "../lib/results";
 import { makeDatabase, type PrimerDraft } from "../lib/database";
@@ -146,7 +146,7 @@ export default function DatabasePicker({
     <section className="card database-card" aria-labelledby="database-title">
       <div className="card-heading">
         <div className="section-icon">
-          <Database size={18} />
+          <Database size={20} />
         </div>
         <div>
           <h2 id="database-title">{t("Primer database")}</h2>
@@ -202,7 +202,7 @@ export default function DatabasePicker({
                   )
                 }
               >
-                <Download size={15} />
+                <Download size={16} />
                 {t("Download dummy database")}
               </button>
             </div>
@@ -238,7 +238,7 @@ export default function DatabasePicker({
             className="button secondary"
             onClick={() => input.current?.click()}
           >
-            <Upload size={15} />
+            <Upload size={16} />
             {t("Choose database")}
           </button>
         </div>
@@ -330,7 +330,7 @@ export default function DatabasePicker({
                       setPrimers(primers.filter((p) => p.key !== primer.key));
                     }}
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
                 <div className="primer-sequence-fields">
@@ -451,7 +451,7 @@ export default function DatabasePicker({
                 setPrimers([...primers, emptyPrimer(nextKey.current++)]);
               }}
             >
-              <Plus size={15} />
+              <Plus size={16} />
               {t("Add primer")}
             </button>
             <button
@@ -467,7 +467,7 @@ export default function DatabasePicker({
       )}
       {loading && (
         <p className="database-hint" role="status">
-          <LoaderCircle size={15} className="spin" />
+          <PixelLoader size={16} />
           {t("Validating database…")}
         </p>
       )}
@@ -502,7 +502,7 @@ export default function DatabasePicker({
               )
             }
           >
-            <Download size={15} />
+            <Download size={16} />
             {t("Download database JSON")}
           </button>
         </div>

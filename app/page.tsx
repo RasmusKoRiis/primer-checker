@@ -17,16 +17,16 @@ import {
   ArrowRight,
   Check,
   ChevronRight,
-  Dna,
+  PrimerMark,
   FileText,
   FlaskConical,
   Info,
-  LoaderCircle,
+  PixelLoader,
   Plus,
   ShieldCheck,
   Upload,
   X,
-} from "lucide-react";
+} from "./components/pixel-icons";
 import type { Analysis, Catalog } from "./lib/results";
 import { validateFiles } from "./lib/results";
 import Results from "./components/results";
@@ -306,7 +306,7 @@ export default function Home() {
             aria-label={t("Primer Checker home")}
           >
             <span className="brand-mark">
-              <Dna size={22} />
+              <PrimerMark size={24} />
             </span>
             <span>
               Primer Checker<span className="brand-divider">/</span>
@@ -335,7 +335,7 @@ export default function Home() {
                 target="_blank"
                 rel="noreferrer"
               >
-                GitHub <ArrowRight size={13} />
+                GitHub <ArrowRight size={16} />
               </a>
             </nav>
             <LanguageSwitch />
@@ -378,17 +378,17 @@ export default function Home() {
           </div>
           <div className="workflow" aria-label={t("Analysis workflow")}>
             <span className={files.length ? "complete" : "current"}>
-              <i>{files.length ? <Check size={12} /> : "1"}</i>
+              <i>{files.length ? <Check size={16} /> : "1"}</i>
               {t("Upload sequences")}
             </span>
-            <ChevronRight size={14} />
+            <ChevronRight size={16} />
             <span className={files.length ? "current" : ""}>
               <i>2</i>
               {t("Configure analysis")}
             </span>
-            <ChevronRight size={14} />
+            <ChevronRight size={16} />
             <span className={result ? "complete" : ""}>
-              <i>{result ? <Check size={12} /> : "3"}</i>
+              <i>{result ? <Check size={16} /> : "3"}</i>
               {t("Explore results")}
             </span>
           </div>
@@ -415,7 +415,7 @@ export default function Home() {
                 >
                   <div className="card-heading">
                     <div className="section-icon">
-                      <FileText size={18} />
+                      <FileText size={20} />
                     </div>
                     <div>
                       <h2 id="sequences-title">{t("Sequence files")}</h2>
@@ -452,7 +452,7 @@ export default function Home() {
                     }}
                   >
                     <div className="upload-icon">
-                      <Upload size={25} strokeWidth={1.5} />
+                      <Upload size={32} />
                     </div>
                     <h3>{t("Drop your FASTA files here")}</h3>
                     <p>{t("or browse files from your computer")}</p>
@@ -461,7 +461,7 @@ export default function Home() {
                       className="button secondary"
                       onClick={() => input.current?.click()}
                     >
-                      <Plus size={15} />
+                      <Plus size={16} />
                       {t("Choose files")}
                     </button>
                     <small>
@@ -487,7 +487,7 @@ export default function Home() {
                               setFiles(files.filter((_, n) => n !== i))
                             }
                           >
-                            <X size={15} />
+                            <X size={16} />
                           </button>
                         </li>
                       ))}
@@ -501,14 +501,14 @@ export default function Home() {
                       onClick={useExample}
                     >
                       {t("Use a synthetic example")}
-                      <ArrowRight size={13} />
+                      <ArrowRight size={16} />
                     </button>
                     <a
                       href="/example.fasta"
                       download
                       aria-label={t("Download synthetic FASTA example")}
                     >
-                      <ArrowDownToLine size={15} />
+                      <ArrowDownToLine size={16} />
                     </a>
                   </div>
                   <FastaFormatHelp />
@@ -519,7 +519,7 @@ export default function Home() {
                 >
                   <div className="card-heading">
                     <div className="section-icon">
-                      <FlaskConical size={18} />
+                      <FlaskConical size={20} />
                     </div>
                     <div>
                       <h2 id="settings-title">{t("Analysis settings")}</h2>
@@ -611,7 +611,7 @@ export default function Home() {
                     </select>
                   </label>
                   <div className="settings-note">
-                    <Info size={15} />
+                    <Info size={16} />
                     <p>
                       {t(
                         virus === "influenza"
@@ -693,7 +693,7 @@ export default function Home() {
                     </p>
                   ) : (
                     <p>
-                      <LoaderCircle size={15} className="spin" />
+                      <PixelLoader size={16} />
                       {t("Checking files and selected primers…")}
                     </p>
                   )}
@@ -706,7 +706,7 @@ export default function Home() {
               </section>
               <div className="run-bar">
                 <div className="privacy-note">
-                  <ShieldCheck size={18} />
+                  <ShieldCheck size={20} />
                   <p>
                     {t(
                       "Do not upload confidential, identifiable, or otherwise restricted data to this public deployment.",
@@ -730,13 +730,13 @@ export default function Home() {
                   >
                     {busy ? (
                       <>
-                        <LoaderCircle className="spin" size={17} />
+                        <PixelLoader size={16} />
                         {t("Analyzing…")}
                       </>
                     ) : (
                       <>
                         {t("Analyze sequences")}
-                        <ArrowRight size={17} />
+                        <ArrowRight size={16} />
                       </>
                     )}
                   </button>
@@ -750,7 +750,7 @@ export default function Home() {
             )}
             {busy && (
               <div className="analysis-status" role="status">
-                <LoaderCircle className="spin" size={19} />
+                <PixelLoader size={20} />
                 <div>
                   <strong>{t("Analysis request in progress")}</strong>
                   <p>
@@ -806,7 +806,7 @@ export default function Home() {
         </div>
         <footer>
           <span>
-            <Dna size={15} /> Primer Checker{" "}
+            <PrimerMark size={16} /> Primer Checker{" "}
             <span className="footer-version">
               {t("v")}
               {catalog?.application_version || "0.1.0"}
@@ -815,7 +815,7 @@ export default function Home() {
           <span>{t("Consensus sequences · PCR & NGS compatibility")}</span>
           <a href="https://github.com/RasmusKoRiis/primer-checker/issues">
             {t("Report an issue")}
-            <ArrowRight size={12} />
+            <ArrowRight size={16} />
           </a>
         </footer>
       </main>

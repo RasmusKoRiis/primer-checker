@@ -9,7 +9,7 @@ import {
   ChevronRight,
   SlidersHorizontal,
   X,
-} from "lucide-react";
+} from "./pixel-icons";
 import {
   aggregatePrimers,
   alignmentColumns,
@@ -103,7 +103,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
           }
         >
           {t(label)}
-          <ArrowUpDown size={11} />
+          <ArrowUpDown size={16} />
         </button>
       </th>
     );
@@ -113,7 +113,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
       <div className="results-heading">
         <div>
           <div className="eyebrow">
-            <Check size={12} />
+            <Check size={16} />
             {t("ANALYSIS COMPLETE")}
           </div>
           <h2 id="results-title">{t("Compatibility results")}</h2>
@@ -135,7 +135,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               )
             }
           >
-            <ArrowDownToLine size={14} /> CSV
+            <ArrowDownToLine size={16} /> CSV
           </button>
           <button
             className="button secondary"
@@ -147,7 +147,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               )
             }
           >
-            <ArrowDownToLine size={14} />
+            <ArrowDownToLine size={16} />
             {t("HTML report")}
           </button>
         </div>
@@ -207,7 +207,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             </button>
           </div>
           <span className="filter-label">
-            <SlidersHorizontal size={14} />
+            <SlidersHorizontal size={16} />
             {t("Filter results")}
           </span>
         </div>
@@ -392,7 +392,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                           onClick={() => setSelected(r)}
                         >
                           {t("Inspect")}
-                          <ChevronRight size={13} />
+                          <ChevronRight size={16} />
                         </button>
                       </td>
                     </tr>
@@ -430,7 +430,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               disabled={!visiblePage}
               onClick={() => setPage(visiblePage - 1)}
             >
-              <ChevronLeft size={17} />
+              <ChevronLeft size={16} />
             </button>
             <span>
               {t("Page {page} of {pages}", { page: visiblePage + 1, pages })}
@@ -441,7 +441,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               disabled={visiblePage >= pages - 1}
               onClick={() => setPage(visiblePage + 1)}
             >
-              <ChevronRight size={17} />
+              <ChevronRight size={16} />
             </button>
           </div>
         </div>
@@ -500,7 +500,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
             )
           }
         >
-          <ArrowDownToLine size={14} />
+          <ArrowDownToLine size={16} />
           {t("Download provenance")}
         </button>
       </details>
@@ -526,7 +526,7 @@ export default function Results({ analysis }: { analysis: Analysis }) {
                 aria-label={t("Close alignment")}
                 onClick={() => dialog.current?.close()}
               >
-                <X size={19} />
+                <X size={20} />
               </button>
             </div>
             <div className="alignment-meta">
