@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregatePrimers,
+  alignmentColumns,
   emptyFilters,
   filterRows,
   validateFiles,
@@ -24,6 +25,35 @@ const rows = [
   { ...base, Hit_Status: "no_hit", Mismatches: "" },
   { ...base, Assay_ID: "other", Mismatches: 1 },
 ];
+describe("alignment columns", () => {
+  it("keeps primer numbering after an insertion and highlights only differing columns", () => {
+    const columns = alignmentColumns({
+      Query_Alignment: "AC-GT",
+      Subject_Alignment: "ACTGA",
+    });
+    expect(columns.map((column) => column.position)).toEqual([1, 2, 2, 3, 4]);
+    expect(columns.map((column) => column.mismatch)).toEqual([
+      false,
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+  it("respects IUPAC compatibility and highlights deletions and terminal gaps", () => {
+    const columns = alignmentColumns({
+      Query_Alignment: "YRNUA",
+      Subject_Alignment: "TG-T-",
+    });
+    expect(columns.map((column) => column.mismatch)).toEqual([
+      false,
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+});
 describe("result summaries", () => {
   it("keeps no-hits separate and distinct assays separate", () => {
     const [first, second] = aggregatePrimers(rows);

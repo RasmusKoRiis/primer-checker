@@ -176,6 +176,8 @@ def count_mismatches(query_aln: str, subject_aln: str) -> int:
     using ambiguous nucleotide matching. Gaps ('-') are treated as mismatches.
     Both input strings should be of equal length.
     """
+    if len(query_aln) != len(subject_aln):
+        raise ValueError("Aligned primer and subject must have the same number of columns.")
     mismatches = 0
     for a, b in zip(query_aln, subject_aln):
         if a == '-' or b == '-' or not bases_match(a, b):
@@ -235,10 +237,16 @@ def reconstruct_full_primer_alignment(
     bases. For reporting, those omitted bases are important because terminal
     mismatches can affect primer performance.
     """
+    # Keep BLAST's query gaps: dropping them shifts every subsequent column.
+    # Retain the original oligo bases (including IUPAC codes) in those columns.
+    primer_seq = primer_seq.upper()
+    aligned_bases = iter(primer_seq[qstart - 1:qend])
+    gapped_primer = "".join("-" if base == "-" else next(aligned_bases) for base in qseq)
+    query_alignment = primer_seq[:qstart - 1] + gapped_primer + primer_seq[qend:]
     missing_start = qstart - 1
     missing_end = len(primer_seq) - qend
     if not subject_sequence:
-        return primer_seq, (
+        return query_alignment, (
             ("-" * missing_start)
             + sseq.upper()
             + ("-" * missing_end)
@@ -259,7 +267,25 @@ def reconstruct_full_primer_alignment(
         right = reverse_complement(subject_sequence[right_start:max(0, send - 1)])
         right = _pad_right(right, missing_end)
 
-    return primer_seq.upper(), left + sseq.upper() + right
+    return query_alignment, left + sseq.upper() + right
+
+
+def mismatch_events(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str):
+    """Yield primer positions and differing aligned bases in oligo orientation.
+
+    Insertions are anchored to the preceding primer base (position 1 if before
+    the first base); query gaps never advance primer numbering.
+    """
+    for pos in range(1, qstart):
+        yield pos, full_primer[pos - 1].upper(), "-"
+    pos = qstart - 1
+    for q_base, s_base in zip(qseq.upper(), sseq.upper()):
+        if q_base != "-":
+            pos += 1
+        if q_base == "-" or s_base == "-" or not bases_match(q_base, s_base):
+            yield max(1, pos), q_base, s_base
+    for pos in range(qend + 1, len(full_primer) + 1):
+        yield pos, full_primer[pos - 1].upper(), "-"
 
 
 def get_mismatch_positions(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str) -> str:
@@ -271,23 +297,8 @@ def get_mismatch_positions(qseq: str, sseq: str, qstart: int, qend: int, full_pr
     positions before qstart or after qend) are included.
     Returns a comma-separated string of mismatch positions.
     """
-    mismatches = []
-
-    # Check aligned region positions.
-    for i, (q_base, s_base) in enumerate(zip(qseq, sseq)):
-        pos = qstart + i  # position in full primer (1-indexed)
-        if q_base == '-' or s_base == '-' or not bases_match(q_base, s_base):
-            mismatches.append(pos)
-
-    # Include positions for missing bases at the beginning.
-    for pos in range(1, qstart):
-        mismatches.append(pos)
-    # Include positions for missing bases at the end.
-    for pos in range(qend+1, len(full_primer)+1):
-        mismatches.append(pos)
-
-    mismatches = sorted(mismatches)
-    return ",".join(map(str, mismatches)) if mismatches else ""
+    positions = {pos for pos, _q, _s in mismatch_events(qseq, sseq, qstart, qend, full_primer)}
+    return ",".join(map(str, sorted(positions)))
 
 
 def get_mismatch_details(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str) -> str:
@@ -295,19 +306,13 @@ def get_mismatch_details(qseq: str, sseq: str, qstart: int, qend: int, full_prim
     Return comma-separated mismatch details as position:primer_base>subject_base.
     Bases outside partial BLAST alignment are represented as subject gaps.
     """
-    details = []
-    for i, (q_base, s_base) in enumerate(zip(qseq, sseq)):
-        pos = qstart + i
-        if q_base == '-' or s_base == '-' or not bases_match(q_base, s_base):
-            primer_base = full_primer[pos - 1] if 1 <= pos <= len(full_primer) else q_base
-            details.append((pos, f"{pos}:{primer_base.upper()}>{s_base.upper()}"))
-
-    for pos in range(1, qstart):
-        details.append((pos, f"{pos}:{full_primer[pos - 1].upper()}>-"))
-    for pos in range(qend + 1, len(full_primer) + 1):
-        details.append((pos, f"{pos}:{full_primer[pos - 1].upper()}>-"))
-
-    return ",".join(detail for _pos, detail in sorted(details))
+    # One entry per anchor keeps report percentages bounded by hit count, even
+    # for a multi-base insertion or a substitution followed by an insertion.
+    details: dict[int, tuple[str, str]] = {}
+    for pos, q_base, s_base in mismatch_events(qseq, sseq, qstart, qend, full_primer):
+        query, subject = details.get(pos, ("", ""))
+        details[pos] = (query + q_base.replace("-", ""), subject + s_base.replace("-", ""))
+    return ",".join(f"{pos}:{query or '-'}>{subject or '-'}" for pos, (query, subject) in sorted(details.items()))
 
 # --- End Ambiguity Functions ---
 

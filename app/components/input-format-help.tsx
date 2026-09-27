@@ -117,6 +117,11 @@ export function DatabaseFormatHelp({
           "Start from a template below, or use Build a database to create the JSON without editing it by hand. Download the file, replace the example primers, then choose Upload JSON.",
         )}
       </p>
+      <p>
+        {t(
+          "Enter every primer as the oligo sequence in 5′ → 3′ direction, including reverse primers. Do not reverse-complement it before entry. The forward/reverse role is metadata; the analysis searches both strands of the uploaded sequence.",
+        )}
+      </p>
       <div
         className="format-options"
         role="group"

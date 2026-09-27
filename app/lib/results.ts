@@ -102,6 +102,44 @@ export const emptyFilters: Filters = {
   status: "",
   mismatches: "",
 };
+const iupacBases: Record<string, string> = {
+  A: "A",
+  C: "C",
+  G: "G",
+  T: "T",
+  U: "T",
+  R: "AG",
+  Y: "CT",
+  S: "GC",
+  W: "AT",
+  K: "GT",
+  M: "AC",
+  B: "CGT",
+  D: "AGT",
+  H: "ACT",
+  V: "ACG",
+  N: "ACGT",
+};
+export function alignmentColumns(
+  row: Pick<ResultRow, "Query_Alignment" | "Subject_Alignment">,
+) {
+  let position = 0;
+  return Array.from(row.Query_Alignment).map((base, index) => {
+    if (base !== "-") position++;
+    const subject = row.Subject_Alignment[index] || "-";
+    const queryBases = iupacBases[base.toUpperCase()] || "";
+    const subjectBases = iupacBases[subject.toUpperCase()] || "";
+    return {
+      base,
+      subject,
+      position,
+      // An insertion is highlighted in its gap column, not on its anchor base.
+      mismatch: !Array.from(queryBases).some((nucleotide) =>
+        subjectBases.includes(nucleotide),
+      ),
+    };
+  });
+}
 export function filterRows(rows: ResultRow[], f: Filters) {
   return rows.filter(
     (r) =>

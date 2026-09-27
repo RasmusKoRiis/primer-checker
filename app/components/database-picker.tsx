@@ -215,7 +215,7 @@ export default function DatabasePicker({
         <div className="database-builder">
           <p className="database-hint">
             {t(
-              "Enter primers in 5′ → 3′ orientation. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.",
+              "Enter primers in 5′ → 3′ orientation, including reverse primers; do not reverse-complement them. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.",
             )}
           </p>
           <div className="database-fields">

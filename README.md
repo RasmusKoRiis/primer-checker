@@ -517,6 +517,22 @@ supported by the CLI and the installed reference library, not by public uploads.
 Choose **Build a database**, enter a name, organism, version, PCR/NGS type, and
 primer names/sequences (5′ → 3′), then **Create database**. Add primers with
 **Add primer**. Role, segment, pool, and influenza subtype tags are supported.
+Supply reverse primers as the actual oligo in **5′ → 3′** direction too; do not
+reverse-complement them before entry. BLAST searches both subject strands,
+independently of role metadata. Alignments show both rows in primer orientation,
+reverse-complementing reverse-strand subject hits. Position 1 is always the
+primer's 5′ end, and the last five primer bases remain its 3′ terminal region.
+The displayed subject coordinates describe the original local BLAST hit
+(1-based, inclusive), before extension to the full primer; reverse hits have
+decreasing coordinates.
+
+Alignment gaps are preserved. An insertion is anchored to the preceding primer
+base without shifting later positions (`19:->T` means T inserted after position
+19; a leading insertion uses anchor 1). Each gap column counts as a difference,
+but position charts count each affected anchor once per hit. Changes sharing
+an anchor are combined in the base-difference field. Regression fixtures in
+`fixtures/reverse_primer` cover both strands, terminal mismatches, and indels.
+
 For influenza, the database specifies the organism type (for example
 `Influenza-A`, `Influenza-B`, `Influenza-C`, or `Influenza-D`) and any segment
 label matching the FASTA headers. The validated database becomes active

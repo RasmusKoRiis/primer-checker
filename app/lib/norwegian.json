@@ -161,8 +161,8 @@
   "Download provenance": "Last ned datagrunnlag og innstillinger",
   "ALIGNMENT INSPECTOR": "SEKVENSSAMMENSTILLING",
   "Close alignment": "Lukk sekvenssammenstillingen",
-  "Forward": "Forward",
-  "Reverse": "Reverse",
+  "Forward": "Forover",
+  "Reverse": "Revers",
   "{strand} strand · {start}–{end}": "{strand}-tråd · {start}–{end}",
   "No BLAST hit": "Ingen BLAST-treff",
   "Original primer sequence": "Opprinnelig primersekvens",
@@ -305,5 +305,12 @@
   "For influenza, specify the type in organism (for example \"Influenza-A\", \"Influenza-B\", \"Influenza-C\", or \"Influenza-D\"). Segment labels come from your database, for example \"PB2\", \"PB1\", \"PA\", \"HA\", \"NP\", \"NA\", \"M\", or \"NS\", and must match the FASTA headers. subtype_tags accepts labels such as [\"H5N1\", \"H7N9\"]. A selected tag matches exactly: \"H5\" does not automatically include \"H5N1\". List both tags to include a primer in both selections. An explicit empty list [] makes a primer shared by all subtypes of its influenza type; omitted tags can be inferred from legacy primer names. The subtype menu shows only types and tags present in the database; a type such as A selects all its primers, while other types use labels such as B/VICTORIA.": "For influensa angir du typen i organism (for eksempel \"Influenza-A\", \"Influenza-B\", \"Influenza-C\" eller \"Influenza-D\"). Segmentnavnene hentes fra databasen din, for eksempel \"PB2\", \"PB1\", \"PA\", \"HA\", \"NP\", \"NA\", \"M\" eller \"NS\", og må samsvare med FASTA-overskriftene. subtype_tags godtar navn som [\"H5N1\", \"H7N9\"]. Valgt merking må samsvare nøyaktig: \"H5\" inkluderer ikke automatisk \"H5N1\". Oppgi begge for å inkludere en primer i begge valg. En eksplisitt tom liste [] gjør primeren felles for alle subtyper av den influensatypen; utelatt merking kan utledes fra eldre primernavn. Subtypemenyen viser bare typer og merking som finnes i databasen; en type som A velger alle primerne for typen, mens andre typer bruker valg som B/VICTORIA.",
   "Subtype tags (optional)": "Subtypemerking (valgfritt)",
   "For example PB2, HA, NA": "For eksempel PB2, HA, NA",
-  "For example H5N1, H7N9": "For eksempel H5N1, H7N9"
+  "For example H5N1, H7N9": "For eksempel H5N1, H7N9",
+  "Local BLAST hit: {strand} strand · {start}–{end} (1-based, inclusive)": "Lokalt BLAST-treff: {strand} tråd · {start}–{end} (1-basert, inklusive)",
+  "Both rows follow the primer’s 5′ → 3′ direction. For a reverse-strand hit, the subject is reverse-complemented. Coordinates above refer to the local BLAST hit before extension to the full primer.": "Begge rader følger primerens 5′ → 3′-retning. Ved treff på revers tråd er prøvesekvensen reverskomplementert. Koordinatene over gjelder det lokale BLAST-treffet før utvidelse til hele primeren.",
+  "Original primer sequence (5′ → 3′)": "Opprinnelig primersekvens (5′ → 3′)",
+  "Highlighted columns show base differences or gaps. Primer positions start at 1 at the 5′ end; the 3′ end is on the right. Insertions do not advance primer numbering.": "Markerte kolonner viser baseforskjeller eller gap. Primerposisjoner starter på 1 ved 5′-enden; 3′-enden er til høyre. Innsettinger forskyver ikke primernummereringen.",
+  "Base differences": "Baseforskjeller",
+  "Enter every primer as the oligo sequence in 5′ → 3′ direction, including reverse primers. Do not reverse-complement it before entry. The forward/reverse role is metadata; the analysis searches both strands of the uploaded sequence.": "Skriv hver primer som oligosekvensen i 5′ → 3′-retning, også reversprimere. Ikke reverskomplementer den før innlegging. Rollen forover/revers er metadata; analysen søker på begge tråder av den opplastede sekvensen.",
+  "Enter primers in 5′ → 3′ orientation, including reverse primers; do not reverse-complement them. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.": "Skriv primere i 5′ → 3′-retning, også reversprimere; ikke reverskomplementer dem. DNA IUPAC-tvetydighetskoder støttes. Opprett databasen for å bruke den i analysen og laste ned en gjenbrukbar JSON-fil."
 }

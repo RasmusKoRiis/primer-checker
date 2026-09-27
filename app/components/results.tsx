@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   aggregatePrimers,
+  alignmentColumns,
   download,
   emptyFilters,
   filterRows,
@@ -530,36 +531,46 @@ export default function Results({ analysis }: { analysis: Analysis }) {
               <span>{selected.Assay_Name}</span>
               <span>
                 {selected.Hit_Status === "hit"
-                  ? t("{strand} strand · {start}–{end}", {
-                      strand: t(
-                        Number(selected.Subject_End) >=
-                          Number(selected.Subject_Start)
-                          ? "Forward"
-                          : "Reverse",
-                      ),
-                      start: selected.Subject_Start,
-                      end: selected.Subject_End,
-                    })
+                  ? t(
+                      "Local BLAST hit: {strand} strand · {start}–{end} (1-based, inclusive)",
+                      {
+                        strand: t(
+                          Number(selected.Subject_End) >=
+                            Number(selected.Subject_Start)
+                            ? "Forward"
+                            : "Reverse",
+                        ),
+                        start: selected.Subject_Start,
+                        end: selected.Subject_End,
+                      },
+                    )
                   : t("No BLAST hit")}
               </span>
             </div>
-            <p className="sequence-label">{t("Original primer sequence")}</p>
+            <p className="sequence-label">
+              {t("Original primer sequence (5′ → 3′)")}
+            </p>
             <div className="original-sequence mono">
               {selected.Primer_Sequence}
             </div>
             {selected.Hit_Status === "hit" ? (
               <>
                 <Alignment row={selected} />
+                <p className="section-note">
+                  {t(
+                    "Both rows follow the primer’s 5′ → 3′ direction. For a reverse-strand hit, the subject is reverse-complemented. Coordinates above refer to the local BLAST hit before extension to the full primer.",
+                  )}
+                </p>
                 <p className="alignment-legend">
                   <span />
                   {t(
-                    "Highlighted bases are mismatches reported by the analysis engine. Positions are relative to the primer, starting at 1.",
+                    "Highlighted columns show base differences or gaps. Primer positions start at 1 at the 5′ end; the 3′ end is on the right. Insertions do not advance primer numbering.",
                   )}
                 </p>
                 <dl className="alignment-details">
                   <dt>{t("Mismatch positions")}</dt>
                   <dd>{selected.Mismatch_Positions || t("None")}</dd>
-                  <dt>{t("Substitutions")}</dt>
+                  <dt>{t("Base differences")}</dt>
                   <dd className="mono">
                     {selected.Mismatch_Details || t("None")}
                   </dd>
@@ -601,17 +612,7 @@ function Stat({
 }
 function Alignment({ row }: { row: ResultRow }) {
   const { t } = useLanguage();
-  const positions = new Set(row.Mismatch_Positions.split(",").map(Number));
-  let position = 0;
-  const columns = Array.from(row.Query_Alignment).map((base, index) => {
-    if (base !== "-") position++;
-    return {
-      base,
-      subject: row.Subject_Alignment[index],
-      position,
-      mismatch: positions.has(position) || base === "-",
-    };
-  });
+  const columns = alignmentColumns(row);
   return (
     <div
       className="alignment-scroll"

@@ -186,13 +186,13 @@
   "doc_detail_title": "Sekvenstabell og sekvenssammenstilling",
   "doc_detail_text": "Tabellen viser FASTA-fil, organisme eller virus, sekvens-ID, segment, treffstatus, identitet, antall mismatch, mismatch-posisjoner og baseendringer. Sammenligninger uten treff vises først som standard. Klikk på en sekvens-ID for å åpne primer-sekvens-sammenstillingen når den er tilgjengelig.",
   "doc_alignment_title": "Slik leser du en sekvenssammenstilling",
-  "doc_alignment_text": "Primeren vises over den observerte sekvensen. En loddrett strek markerer en kompatibel base. Tomme posisjoner viser en forskjell. Linjen Baseforskjeller viser de registrerte mismatch-posisjonene og baseendringene.",
+  "doc_alignment_text": "Primeren vises over den observerte sekvensen, begge i primerens 5′ → 3′-retning. Treff på revers tråd reverskomplementeres, slik at posisjon 1 fortsatt er ved primerens 5′-ende og 3′-enden er til høyre. Dette er en sammenligning i samme orientering, ikke en tegning av de to fysiske DNA-trådene. En loddrett strek markerer en kompatibel base; et mellomrom eller gap viser en forskjell. Prøvekoordinatene er 1-baserte, inklusive endepunkter for det opprinnelige lokale BLAST-treffet, før utvidelse til hele primeren; de synker ved treff på revers tråd.",
   "doc_workflow_title": "Slik beregnes verdiene",
-  "doc_workflow_1": "Hver valgt primer sammenstilles med hver relevant FASTA-sekvens ved hjelp av BLASTn.",
+  "doc_workflow_1": "Skriv alle primersekvenser som oligoen i 5′ → 3′-retning, også reversprimere; ikke reverskomplementer dem før innlegging. Hver valgt primer søkes mot begge tråder av hver relevant FASTA-sekvens med BLASTn. Rollen forover/revers låser ikke tråden: treffets orientering avhenger av hvordan den opplastede sekvensen er orientert.",
   "doc_workflow_2": "For hvert primer-sekvens-par beholdes sammenstillingen med færrest omberegnede mismatch; ved likt antall velges høyest BLAST-bitscore. Hvis BLAST ikke returnerer en brukbar sammenstilling, merkes sammenligningen som no_hit internt og vises som Ingen treff.",
-  "doc_workflow_3": "Et lokalt BLAST-treff utvides til hele primerlengden med tilstøtende sekvensbaser, reverskomplementert ved behov. Mismatch beregnes deretter på nytt, inkludert inkompatible baser og utilgjengelige baser vist som gap. Utelatte ender er ikke automatisk mismatch når kompatible nabobaser kan hentes fra sekvensen.",
+  "doc_workflow_3": "Et lokalt BLAST-treff utvides til hele primerlengden med tilstøtende sekvensbaser, reverskomplementert ved behov. Gap i sammenstillingen beholdes. Mismatch beregnes deretter på nytt, med én forskjell per inkompatibel base eller gapkolonne. Utelatte ender er ikke automatisk mismatch når kompatible nabobaser kan hentes fra sekvensen.",
   "doc_workflow_4": "Kompatible IUPAC-koder behandles som treff. Primerbase Y er for eksempel kompatibel med C eller T i sekvensen.",
-  "doc_workflow_5": "Mismatch-posisjoner starter på 1 ved primerens 5′-ende. Baseendringer vises som posisjon:primerbase>sekvensbase, for eksempel 9:T>A.",
+  "doc_workflow_5": "Mismatch-posisjoner starter på 1 ved primerens 5′-ende, på begge tråder. Baseendringer vises som posisjon:primerbase>sekvensbase, for eksempel 9:T>A. Innsettinger knyttes til foregående primerposisjon (posisjon 1 ved innsetting før første base): 9:->AC betyr AC satt inn etter posisjon 9. Senere primerposisjoner forskyves ikke. Hver gapbase teller som én forskjell, men hvert anker vises én gang i posisjonsdiagrammer; flere endringer ved samme anker kombineres. De siste fem primerbasene er fortsatt den terminale 3′-regionen også for reversprimere.",
   "doc_ngs_title": "Oversikt over NGS-ampliconer",
   "doc_ngs_text": "Denne delen vises bare for NGS-paneler med gjenkjennelige LEFT- og RIGHT-primernavn. Alternative primere behandles som reserve. En side er tilgjengelig når den har minst én primer med nivå Lav eller Følg med. Hvis det ikke finnes en slik LEFT- eller RIGHT-primer, merkes ampliconet som Kritisk i oversikten. Dette er en screeningregel, ikke en direkte måling av ampliconets ytelse.",
   "doc_limits_title": "Viktige begrensninger",
@@ -204,5 +204,9 @@
   "terminal_share_primer": "Treff med mismatch ved primerens 3'-ende (siste 5 baser)",
   "terminal_share_probe": "Treff med mismatch ved probens 5'-ende (første 5 baser)",
   "chart_note_use_primer": "Se etter gjentatte mismatch og høye stolper. Røde markeringer viser de siste 5 basene ved primerens 3'-ende. Bare mismatch i dette området inngår i terminalmismatch-målet.",
-  "chart_note_use_probe": "Se etter gjentatte mismatch og høye stolper. Røde markeringer viser de første 5 basene ved probens 5'-ende. Bare mismatch i dette området inngår i terminalmismatch-målet."
+  "chart_note_use_probe": "Se etter gjentatte mismatch og høye stolper. Røde markeringer viser de første 5 basene ved probens 5'-ende. Bare mismatch i dette området inngår i terminalmismatch-målet.",
+  "strand_forward": "Forover",
+  "strand_reverse": "Revers",
+  "local_hit_coordinates": "Lokalt BLAST-treff: {strand} tråd · {start}–{end} (1-basert, inklusive)",
+  "alignment_orientation": "Begge rader følger primerens 5′ → 3′-retning. Ved treff på revers tråd er prøvesekvensen reverskomplementert. Koordinatene over gjelder det lokale BLAST-treffet før utvidelse til hele primeren."
 }

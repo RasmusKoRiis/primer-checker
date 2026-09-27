@@ -39,6 +39,43 @@ def test_catalog_matches_real_database(client):
     assert len(response.json()["database"]["sha256"]) == 64
 
 
+@pytest.mark.skipif(not shutil.which("blastn"), reason="BLAST+ integration requires blastn")
+@pytest.mark.parametrize("assay_type", ["pcr", "ngs"])
+def test_reverse_oligo_upload_results_and_csv_agree_with_cli(client, tmp_path, assay_type):
+    fixture = ROOT / "fixtures/reverse_primer"
+    database = json.loads((fixture / "primers.json").read_text())
+    database["schemes"][0]["assay_type"] = assay_type
+    database_bytes = json.dumps(database).encode()
+    response = client.post(
+        "/api/analyze", data={"virus": "Synthetic-virus", "assay_type": assay_type},
+        files=[
+            ("database", ("primers.json", database_bytes)),
+            ("files", ("sequences.fasta", (fixture / "sequences.fasta").read_bytes())),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["summary"]["hits"] == 14
+    assert result["summary"]["mismatch_comparisons"] == 12
+    rows = {row["Subject_Sequence_ID"]: row for row in result["rows"]}
+    assert rows["perfect_minus"]["Mismatches"] == 0
+    assert rows["both_minus"]["Mismatch_Details"] == "1:A>T,40:A>C"
+    assert rows["insertion_minus"]["Mismatch_Details"] == "18:->G"
+    assert rows["insertion_minus"]["Mismatches"] == 1
+    assert rows["last_minus"]["Subject_Start"] > rows["last_minus"]["Subject_End"]
+    assert "reverse-complemented" in result["downloads"]["html"]
+    local_db = tmp_path / "primers.json"
+    local_db.write_bytes(database_bytes)
+    subprocess.run([
+        sys.executable, "primer_checker.py", "--primers", str(local_db),
+        "--virus", "Synthetic-virus", "--assay-type", assay_type,
+        "--fasta", str(fixture / "sequences.fasta"), "--output", str(tmp_path / "cli.csv"),
+    ], cwd=ROOT, check=True, capture_output=True)
+    web_rows = list(csv.DictReader(io.StringIO(result["downloads"]["csv"])))
+    with (tmp_path / "cli.csv").open() as cli_csv:
+        assert [{key: row[key] for key in engine.CSV_FIELDNAMES} for row in web_rows] == list(csv.DictReader(cli_csv))
+
+
 @pytest.mark.parametrize(
     "template,fasta,selection,records,comparisons",
     [

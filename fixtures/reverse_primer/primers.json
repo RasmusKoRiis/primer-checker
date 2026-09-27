@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "database_version": "reverse-audit-1",
+  "schemes": [
+    {
+      "scheme_id": "reverse-audit",
+      "display_name": "Reverse primer audit",
+      "organism": "Synthetic-virus",
+      "version": "1.0",
+      "assay_type": "pcr",
+      "primers": [
+        {
+          "id": "audit_RIGHT",
+          "name": "audit_RIGHT",
+          "sequence": "ACGTTGCAAGCTTAGCGATCGATGCTAGCAGTTCGACCTA",
+          "role": "reverse",
+          "strand": "-",
+          "segment": ""
+        }
+      ]
+    }
+  ]
+}
