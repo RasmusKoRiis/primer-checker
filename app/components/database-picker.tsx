@@ -165,7 +165,7 @@ export default function DatabasePicker({
               ? "Installed database"
               : "Dummy database",
           ],
-          ["upload", "Upload JSON"],
+          ["upload", "Upload a database"],
           ["build", "Build a database"],
         ].map(([value, label]) => (
           <button

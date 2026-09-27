@@ -114,7 +114,7 @@ export function DatabaseFormatHelp({
     <div className="format-guide">
       <p>
         {t(
-          "Start from a template below, or use Build a database to create the JSON without editing it by hand. Download the file, replace the example primers, then choose Upload JSON.",
+          "Start from a template below, or use Build a database to create the JSON without editing it by hand. Download the file, replace the example primers, then choose Upload a database.",
         )}
       </p>
       <p>

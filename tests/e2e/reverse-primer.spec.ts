@@ -10,7 +10,9 @@ test("reverse oligos, terminal bases, and gaps agree in the website and download
   await expect(
     page.getByRole("combobox", { name: "Virus", exact: true }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Upload JSON", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Upload a database", exact: true })
+    .click();
   await page
     .getByLabel("Upload primer database", { exact: true })
     .setInputFiles(path.resolve("fixtures/reverse_primer/primers.json"));

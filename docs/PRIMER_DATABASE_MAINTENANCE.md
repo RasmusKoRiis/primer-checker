@@ -7,7 +7,7 @@ primer database is downloaded at runtime.
 
 ## Bring your own primers
 
-Use **Upload JSON** or **Build a database** on the website. Enter each actual
+Use **Upload a database** or **Build a database** on the website. Enter each actual
 oligo in its 5′ → 3′ direction, including reverse primers. Download the resulting
 JSON for reuse. Uploads are temporary and do not replace the installed database.
 

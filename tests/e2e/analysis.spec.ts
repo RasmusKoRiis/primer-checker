@@ -226,7 +226,9 @@ test("build, download, re-upload, and analyze a custom primer database", async (
   expect(JSON.parse(database).schemes[0].primers[0].sequence).toBe(
     "ACGTTGCAAGCTTAGCGATCGATGCTAGCA",
   );
-  await page.getByRole("button", { name: "Upload JSON", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Upload a database", exact: true })
+    .click();
   await page
     .getByLabel("Upload primer database", { exact: true })
     .setInputFiles({
@@ -459,7 +461,9 @@ test("format guides download usable templates and explain influenza headers in b
   const { readFile } = await import("node:fs/promises");
   const database = await readFile((await databaseDownload.path())!, "utf8");
   expect(JSON.parse(database).schemes[0].organism).toBe("Influenza-A");
-  await page.getByRole("button", { name: "Upload JSON", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Upload a database", exact: true })
+    .click();
   await page
     .getByLabel("Upload primer database", { exact: true })
     .setInputFiles({

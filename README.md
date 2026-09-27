@@ -464,7 +464,7 @@ may still contain them; this change does not rewrite Git history.
 
 ### Your own primer database
 
-Choose **Upload JSON** to use a self-contained primer database for this analysis.
+Choose **Upload a database** to use a self-contained primer database for this analysis.
 The web accepts legacy `{organism: {primer_name: sequence}}` dictionaries and
 normalized schema `1.0` databases with inline `schemes[].primers[]` sequences.
 Existing files that reference BED/FASTA assets (`panels[]` or `viruses[]`) remain
