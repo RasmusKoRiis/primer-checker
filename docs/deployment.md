@@ -44,8 +44,9 @@ library has since been replaced in source by `primer_db/dummy_primers.json`
 
 The live deployment was deliberately created with `vercel deploy --prod`
 after the owner requested live testing. The draft PR remains open; neither
-repository's `main` branch was changed. No custom domain, DNS change, or paid
-service was added.
+repository's `main` branch was changed. The owner subsequently requested
+`primercheck.rasmuskriis.no`; see the custom-domain setup below. No paid service
+or plan upgrade was added.
 
 During the earlier preview setup, Vercel classified the first deployment as production despite
 `--target=preview`; it briefly assigned the default `.vercel.app` domains. That
@@ -187,13 +188,13 @@ provide `--archive /path/to/the/pinned/archive.tar.gz`; checksums still apply.
 
 ## Environment variables
 
-| Variable | Default / use |
-| --- | --- |
-| `BLASTN_PATH` | Optional explicit executable; normally leave unset on Vercel. |
-| `PRIMER_DATABASE_PATH` | Optional operator-controlled database path; defaults to `primer_db/dummy_primers.json` (dummy test data only). Any custom assets must also be bundled. Never accepted from request input. |
-| `APP_GIT_COMMIT` | Optional local reproducibility field. |
-| `VERCEL_GIT_COMMIT_SHA` | Automatically supplied by Vercel and preferred over `APP_GIT_COMMIT`. |
-| `PYTHON` | Optional local interpreter override for `npm run dev`. |
+| Variable                | Default / use                                                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BLASTN_PATH`           | Optional explicit executable; normally leave unset on Vercel.                                                                                                                             |
+| `PRIMER_DATABASE_PATH`  | Optional operator-controlled database path; defaults to `primer_db/dummy_primers.json` (dummy test data only). Any custom assets must also be bundled. Never accepted from request input. |
+| `APP_GIT_COMMIT`        | Optional local reproducibility field.                                                                                                                                                     |
+| `VERCEL_GIT_COMMIT_SHA` | Automatically supplied by Vercel and preferred over `APP_GIT_COMMIT`.                                                                                                                     |
+| `PYTHON`                | Optional local interpreter override for `npm run dev`.                                                                                                                                    |
 
 No API keys, persistent database, blob store, or other paid service is required.
 FastAPI reads process environment variables; it does not automatically load
@@ -272,10 +273,37 @@ expiry and asynchronous jobs would remove the request-body bottleneck. That
 would require explicit storage retention, authentication, and job lifecycle
 design; none is introduced in this release.
 
-## Future custom domain
+## Custom domain
 
-After `rasmuskriis.no` is registered and production is approved, add
-`primers.rasmuskriis.no` in Vercel's project Domains settings. Follow the exact
-DNS verification/CNAME records Vercel provides for that project, then confirm
-TLS issuance. Do not assume a fixed CNAME target. No DNS records are changed
-by this implementation.
+The owner registered `rasmuskriis.no` through Domeneshop and requested
+`primercheck.rasmuskriis.no` for this application. That hostname is attached
+to the existing Vercel project under `rasmus-projects1` for production.
+
+On 27 September 2026, Vercel confirmed the project attachment and ownership,
+but DNS configuration was still pending. Public resolvers returned NXDOMAIN
+for the newly registered domain. The existing
+[Vercel address](https://primer-checker.vercel.app) remains available.
+
+In Domeneshop, open the domain's **DNS-pekere** settings and add the record
+returned by `vercel domains verify`:
+
+| Type  | Host          | Target                                |
+| ----- | ------------- | ------------------------------------- |
+| CNAME | `primercheck` | `ebd88c2a19e11954.vercel-dns-017.com` |
+
+This record is scoped to the requested subdomain. Keep the existing nameservers
+and unrelated website/mail records. DNS changes belong in Domeneshop while it
+hosts the domain's DNS; `vercel dns add` does not update that external zone.
+
+After the domain registration is active and the record resolves, verify DNS,
+automatic HTTPS provisioning and the application:
+
+```sh
+npx vercel domains verify primercheck.rasmuskriis.no --scope rasmus-projects1
+npx vercel certs ls --scope rasmus-projects1
+curl --fail https://primercheck.rasmuskriis.no/api/health
+```
+
+Then test the synthetic example through the custom hostname in a browser.
+For any later domain change, ask Vercel for the current recommended records
+instead of assuming this CNAME target applies to a different project.

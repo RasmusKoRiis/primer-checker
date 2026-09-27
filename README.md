@@ -634,11 +634,13 @@ PR is still open and no branches were merged. The existing fork,
 the production branch and other branches creating protected previews.
 PCR/NGS analysis, custom databases, report downloads, and workload rejection
 were verified on Vercel. The public browser flow also completes a real analysis.
-No custom domain or paid service was added.
+The custom hostname `primercheck.rasmuskriis.no` is attached to the Vercel
+project; its Domeneshop DNS setup and HTTPS verification are pending.
+No paid service or plan upgrade was added.
 
 See [the deployment guide](docs/deployment.md) for verified results, direct
 preview and production updates, the GitHub connection, Hobby limits,
-BLAST checksums/libraries, fallback compute design, and future domain setup.
+BLAST checksums/libraries, fallback compute design, and custom-domain setup.
 
 The discovery baseline and design decisions are recorded in
 [the implementation note](docs/web-implementation.md).
