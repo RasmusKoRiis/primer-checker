@@ -312,5 +312,12 @@
   "Highlighted columns show base differences or gaps. Primer positions start at 1 at the 5′ end; the 3′ end is on the right. Insertions do not advance primer numbering.": "Markerte kolonner viser baseforskjeller eller gap. Primerposisjoner starter på 1 ved 5′-enden; 3′-enden er til høyre. Innsettinger forskyver ikke primernummereringen.",
   "Base differences": "Baseforskjeller",
   "Enter every primer as the oligo sequence in 5′ → 3′ direction, including reverse primers. Do not reverse-complement it before entry. The forward/reverse role is metadata; the analysis searches both strands of the uploaded sequence.": "Skriv hver primer som oligosekvensen i 5′ → 3′-retning, også reversprimere. Ikke reverskomplementer den før innlegging. Rollen forover/revers er metadata; analysen søker på begge tråder av den opplastede sekvensen.",
-  "Enter primers in 5′ → 3′ orientation, including reverse primers; do not reverse-complement them. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.": "Skriv primere i 5′ → 3′-retning, også reversprimere; ikke reverskomplementer dem. DNA IUPAC-tvetydighetskoder støttes. Opprett databasen for å bruke den i analysen og laste ned en gjenbrukbar JSON-fil."
+  "Enter primers in 5′ → 3′ orientation, including reverse primers; do not reverse-complement them. DNA IUPAC ambiguity codes are accepted. Create the database to use it in this analysis and download a reusable JSON file.": "Skriv primere i 5′ → 3′-retning, også reversprimere; ikke reverskomplementer dem. DNA IUPAC-tvetydighetskoder støttes. Opprett databasen for å bruke den i analysen og laste ned en gjenbrukbar JSON-fil.",
+  "Every base.": "Hver base.",
+  "In focus.": "I fokus.",
+  "Start an analysis": "Start en analyse",
+  "Explore the method": "Utforsk metoden",
+  "A study in sequence": "Et blikk på sekvensen",
+  "Illustration": "Illustrasjon",
+  "Your sequences. Your primers. A closer look.": "Dine sekvenser. Dine primere. Et nærmere blikk."
 }

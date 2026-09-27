@@ -1,6 +1,7 @@
 "use client";
 import { useLanguage, LanguageSwitch } from "./components/language";
 import Documentation from "./components/documentation";
+import AnalysisIntro from "./components/analysis-intro";
 import { FastaFormatHelp } from "./components/input-format-help";
 
 import {
@@ -343,18 +344,19 @@ export default function Home() {
       </header>
       <main id="main" className="workspace">
         <div id="analysis" hidden={documentation}>
-          <div className="page-heading">
+          {!result && <AnalysisIntro />}
+          <div
+            className={`page-heading analysis-heading ${result ? "has-results" : ""}`}
+            id="analysis-workspace"
+            tabIndex={-1}
+          >
             <div>
-              <div className="eyebrow">
-                <span className="status-dot" />
-                {t("CONSENSUS SEQUENCE ANALYSIS")}
-              </div>
-              <h1>{t(result ? "Analysis workspace" : "New analysis")}</h1>
-              <p>
-                {t(
-                  "Evaluate PCR and sequencing primer compatibility against viral consensus sequences.",
-                )}
-              </p>
+              {result ? (
+                <h1>{t("Analysis workspace")}</h1>
+              ) : (
+                <h2>{t("New analysis")}</h2>
+              )}
+              <p>{t("Your sequences. Your primers. A closer look.")}</p>
             </div>
             <div className="db-stamp">
               <span>{t("PRIMER DATABASE")}</span>

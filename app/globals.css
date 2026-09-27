@@ -1,11 +1,11 @@
 :root {
-  --bg: #f5f7f8;
+  --bg: #f5f5f0;
   --paper: #fff;
-  --ink: #1d3037;
-  --muted: #65747c;
-  --line: #dce3e6;
-  --teal: #12695f;
-  --teal-light: #eaf4f0;
+  --ink: #193c35;
+  --muted: #65736b;
+  --line: #dce1d9;
+  --teal: #225e4f;
+  --teal-light: #eaf1e9;
   --amber: #96591c;
   --red: #a13030;
 }
@@ -107,7 +107,7 @@ button svg {
   top: 10px;
 }
 .topbar {
-  background: #fff;
+  background: #fafbf7;
   border-bottom: 1px solid var(--line);
 }
 .topbar-inner {
@@ -133,7 +133,7 @@ button svg {
   display: grid;
   place-items: center;
   border: 1px solid #b6ccc4;
-  border-radius: 9px;
+  border-radius: 4px;
   color: var(--teal);
   background: #f0f7f3;
 }
@@ -270,8 +270,7 @@ button svg {
 .card {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 9px;
-  box-shadow: 0 2px 3px #1e353504;
+  border-radius: 5px;
 }
 .upload-card,
 .settings-card {
@@ -349,7 +348,7 @@ button svg {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 9px 13px;
   font-size: 12px;
   font-weight: 600;
@@ -1782,5 +1781,250 @@ tbody tr:hover {
   .format-guide .button {
     white-space: normal;
     text-align: left;
+  }
+}
+
+/* A compact typographic introduction; the working interface stays below it. */
+.analysis-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 64px;
+  align-items: center;
+  padding: 0 0 32px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+}
+.intro-copy {
+  padding: 4px 0;
+  min-width: 0;
+}
+.intro-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  font:
+    10px/1.5 "Courier New",
+    monospace;
+  letter-spacing: 1.2px;
+  color: var(--teal);
+}
+.intro-kicker > span {
+  width: 19px;
+  height: 3px;
+  background: var(--teal);
+}
+.intro-copy h1 {
+  font-size: clamp(54px, 5.9vw, 80px);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.065em;
+}
+.intro-copy h1 > span {
+  display: block;
+  animation: intro-type-in 650ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.intro-copy h1 > span:last-child {
+  color: #537366;
+  animation-delay: 80ms;
+}
+.intro-copy > p {
+  max-width: 380px;
+  margin-top: 22px;
+  font-size: 13px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+.intro-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  align-items: center;
+  margin-top: 22px;
+  font-size: 12px;
+}
+.intro-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 34px;
+}
+.intro-start {
+  font-weight: 600;
+  border-bottom: 1px solid var(--ink);
+}
+.intro-guide {
+  color: var(--muted);
+}
+.intro-links a:hover {
+  color: var(--teal);
+}
+.intro-links svg {
+  transition: transform 180ms ease;
+}
+.intro-start:hover svg {
+  transform: translateY(3px);
+}
+.intro-guide:hover svg {
+  transform: translate(2px, -2px);
+}
+.intro-study {
+  min-width: 0;
+  overflow: hidden;
+  background: #e6ecdf;
+  border: 1px solid #d5dece;
+  color: #214a3c;
+}
+.study-topline,
+.study-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 17px;
+  font:
+    9px/1.4 "Courier New",
+    monospace;
+  letter-spacing: 0.7px;
+  color: #53664f;
+}
+.study-topline {
+  border-bottom: 1px solid #d5dece;
+}
+.study-caption {
+  border-top: 1px solid #d5dece;
+}
+.study-caption > span:last-child {
+  text-transform: uppercase;
+  font-size: 8px;
+}
+.study-art {
+  overflow: hidden;
+  height: 246px;
+  display: grid;
+  place-items: center;
+}
+.study-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: sequence-in 950ms cubic-bezier(0.2, 0.65, 0.3, 1) both;
+}
+.sequence-type {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 59px;
+  font-weight: 700;
+  letter-spacing: -3px;
+}
+.sequence-guides {
+  opacity: 0.2;
+}
+.sequence-accent {
+  fill: #a65b40;
+}
+.sequence-center {
+  opacity: 0.5;
+}
+.analysis-heading {
+  scroll-margin-top: 100px;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+.analysis-heading h2 {
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.7px;
+}
+.analysis-heading p {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.analysis-heading .db-stamp strong {
+  font-size: 13px;
+}
+.analysis-heading.has-results {
+  padding-block: 8px 12px;
+}
+@keyframes intro-type-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes sequence-in {
+  from {
+    opacity: 0;
+    transform: scale(1.065);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (max-width: 1000px) {
+  .analysis-intro {
+    gap: 30px;
+  }
+  .intro-copy h1 {
+    font-size: 58px;
+  }
+  .intro-kicker {
+    font-size: 9px;
+    letter-spacing: 0.6px;
+  }
+  .intro-links {
+    gap: 8px 18px;
+  }
+}
+@media (max-width: 720px) {
+  .analysis-intro {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+  }
+  .intro-copy h1 {
+    font-size: clamp(52px, 10vw, 68px);
+  }
+  .intro-kicker {
+    margin-bottom: 18px;
+  }
+  .intro-copy > p {
+    max-width: 410px;
+    margin-top: 17px;
+  }
+  .intro-links {
+    margin-top: 14px;
+  }
+  .study-art {
+    height: 154px;
+    display: grid;
+    place-items: center;
+  }
+  .study-art svg {
+    height: 100%;
+    width: 100%;
+  }
+  .study-topline,
+  .study-caption {
+    padding: 9px 14px;
+  }
+  .analysis-heading h2 {
+    font-size: 23px;
+  }
+  .analysis-heading {
+    scroll-margin-top: 140px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-copy h1 > span,
+  .study-art svg {
+    animation: none;
+  }
+  .intro-links svg {
+    transition: none;
   }
 }
