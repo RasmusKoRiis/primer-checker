@@ -2,7 +2,6 @@
 import { useLanguage, LanguageSwitch } from "./components/language";
 import Documentation from "./components/documentation";
 import AnalysisIntro from "./components/analysis-intro";
-import PcrMachine from "./components/pcr-machine";
 import { FastaFormatHelp } from "./components/input-format-help";
 
 import {
@@ -730,7 +729,6 @@ export default function Home() {
                     disabled={!readyToAnalyze || busy}
                     data-running={busy}
                   >
-                    <PcrMachine running={busy} />
                     <span>{t(busy ? "Analyzing…" : "Analyze sequences")}</span>
                   </button>
                 </div>
