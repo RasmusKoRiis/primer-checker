@@ -887,7 +887,8 @@ def test_html_report_build_failure_preserves_existing_output(monkeypatch, tmp_pa
         raise ValueError("invalid report text")
 
     monkeypatch.setattr(primer_report, "build_html_report", fail_to_build)
-    primer_report.write_html_report([{"Primer_Name": "primer-a"}], str(output))
+    with pytest.raises(ValueError, match="invalid report text"):
+        primer_report.write_html_report([{"Primer_Name": "primer-a"}], str(output))
 
     assert output.read_text(encoding="utf-8") == "existing report"
 

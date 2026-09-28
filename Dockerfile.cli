@@ -1,0 +1,14 @@
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ncbi-blast+ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/primer-checker
+COPY primer_checker.py primer_analysis.py primer_report.py ./
+COPY report_text/ ./report_text/
+COPY scripts/run_pipeline_primer_check.py ./scripts/run_pipeline_primer_check.py
+ARG PRIMER_CHECKER_REVISION=unknown
+RUN printf '%s\n' "$PRIMER_CHECKER_REVISION" > REVISION
+ENV BLASTN_PATH=blastn PYTHONDONTWRITEBYTECODE=1
+CMD ["python3", "/opt/primer-checker/primer_checker.py", "--help"]

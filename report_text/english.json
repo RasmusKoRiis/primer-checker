@@ -1,4 +1,6 @@
 {
+  "status_indeterminate": "Indeterminate",
+  "indeterminate": "Indeterminate",
   "report_title": "Primer binding report",
   "report_meta": "Shows how well primers match relevant target sequences. Use the report to identify primers that may need review. The documentation tab explains the calculations and how to interpret the values.",
   "language_label": "Report language",

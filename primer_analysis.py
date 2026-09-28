@@ -1578,7 +1578,7 @@ def get_segment(subject_id: str) -> str:
     Returns the segment code (e.g., "M" or "HA") or an empty string if not found.
     """
     for token in subject_id.split("|"):
-        match = re.fullmatch(r"\d{1,2}-([A-Za-z0-9]+)", token.strip())
+        match = re.fullmatch(r"\d{1,2}-([A-Za-z0-9]+)(?:-[A-Za-z0-9/_.-]+)?", token.strip())
         if match:
             return match.group(1).upper()
     return ""
@@ -1758,7 +1758,8 @@ def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, 
     unparseable_count = 0
     for subject_id in subject_ids:
         subject_segment = get_segment(subject_id)
-        if subject_segment == primer.segment:
+        # IRMA/fluseq use MP; legacy PCR databases commonly call this segment M.
+        if {"M": "MP"}.get(subject_segment, subject_segment) == {"M": "MP"}.get(primer.segment, primer.segment):
             filtered_subject_ids.append(subject_id)
         elif not subject_segment:
             unparseable_count += 1
@@ -1881,13 +1882,8 @@ def write_csv_rows(results: list, stream, *, extra_fieldnames: tuple[str, ...] =
 
 def write_csv_report(results: list, output_file: str):
     """Write the results to a CSV file."""
-    if not results:
-        print("No results to write.", file=sys.stderr)
-        return
-
-    try:
-        with open(output_file, "w", newline="") as csvfile:
-            write_csv_rows(results, csvfile)
-        print(f"Report successfully written to {output_file}")
-    except Exception as e:
-        print(f"Error writing CSV file: {e}", file=sys.stderr)
+    # Empty analyses still have a valid, machine-readable header. I/O errors
+    # must propagate so workflow engines cannot mistake them for success.
+    with open(output_file, "w", newline="") as csvfile:
+        write_csv_rows(results, csvfile)
+    print(f"Report successfully written to {output_file}")

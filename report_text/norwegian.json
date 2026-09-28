@@ -1,4 +1,6 @@
 {
+  "status_indeterminate": "Uavklart",
+  "indeterminate": "Uavklart",
   "report_title": "Rapport om primerbinding og sekvensmatch",
   "report_meta": "Rapporten under Viser hvor godt primere insilico passer til relevante sekvenser. Bruk rapporten til å finne primere som bør vurderes nærmere. En utvidet forklaring av detaljene i rapporten er gitt i Hjelp og dokumentasjonsfanen.   ",
   "language_label": "Rapportspråk",

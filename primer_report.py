@@ -289,6 +289,7 @@ def build_html_report(
     }
     .hit { color: var(--good); background: #e7f5eb; }
     .no_hit { color: var(--bad); background: #fde8e7; }
+    .indeterminate, .risk-indeterminate { color: #475569; background: #e2e8f0; }
     .risk-low { color: var(--good); background: var(--low-bg); }
     .risk-watch { color: #8a5a00; background: var(--watch-bg); }
     .risk-high { color: #9a4b00; background: var(--high-bg); }
@@ -402,6 +403,7 @@ def build_html_report(
     .dist-2 { background: var(--warn); }
     .dist-3, .dist-4plus { background: #dd6b20; }
     .dist-no_hit { background: var(--bad); }
+    .dist-indeterminate { background: #94a3b8; }
     .primer-sequence-map {
       width: 100%;
       overflow-x: auto;
@@ -886,14 +888,15 @@ def build_html_report(
       criticalTerminalMismatchRate: 0.50,
       terminalBases: 5
     };
-    const riskRank = { Low: 0, Watch: 1, High: 2, Critical: 3 };
+    const riskRank = { Low: 0, Watch: 1, High: 2, Critical: 3, Indeterminate: 4 };
     const distCategories = [
       { key: '0', labelKey: 'dist_0' },
       { key: '1', labelKey: 'dist_1' },
       { key: '2', labelKey: 'dist_2' },
       { key: '3', labelKey: 'dist_3' },
       { key: '4plus', labelKey: 'dist_4plus' },
-      { key: 'no_hit', labelKey: 'dist_no_hit' }
+      { key: 'no_hit', labelKey: 'dist_no_hit' },
+      { key: 'indeterminate', labelKey: 'status_indeterminate' }
     ];
     const mismatchChangePalette = ['#1f7a8c', '#b42318', '#287d3c', '#b7791f', '#6f42c1', '#c2410c', '#0f766e', '#be185d', '#4d7c0f', '#0369a1', '#92400e', '#475569'];
     const mismatchChangeColorMap = new Map();
@@ -966,7 +969,7 @@ def build_html_report(
       select.innerHTML = '<option value="">' + t(labelKey) + '</option>' + values.map(value => '<option>' + escapeHtml(value) + '</option>').join('');
     }
     function fillRiskSelect() {
-      const riskValues = ['Low', 'Watch', 'High', 'Critical'];
+      const riskValues = ['Low', 'Watch', 'High', 'Critical', 'Indeterminate'];
       filters.risk.innerHTML = '<option value="">' + t('all_risks') + '</option>' +
         riskValues.map(risk => '<option value="' + risk + '">' + escapeHtml(t(risk.toLowerCase())) + '</option>').join('');
     }
@@ -980,6 +983,7 @@ def build_html_report(
       return row.Hit_Status === 'no_hit' || row.Percent_Identity === 'No hit';
     }
     function statusLabel(row) {
+      if (row.Hit_Status === 'indeterminate') return t('status_indeterminate');
       return isNoHit(row) ? t('status_no_hit') : t('status_hit');
     }
     function displayValue(value) {
@@ -1046,8 +1050,12 @@ def build_html_report(
       return role === 'probe' ? 'chart_note_use_probe' : 'chart_note_use_primer';
     }
     function calculateMismatchDistribution(group) {
-      const distribution = { '0': 0, '1': 0, '2': 0, '3': 0, '4plus': 0, no_hit: 0 };
+      const distribution = { '0': 0, '1': 0, '2': 0, '3': 0, '4plus': 0, no_hit: 0, indeterminate: 0 };
       for (const row of group) {
+        if (row.Hit_Status === 'indeterminate') {
+          distribution.indeterminate += 1;
+          continue;
+        }
         if (isNoHit(row)) {
           distribution.no_hit += 1;
           continue;
@@ -1060,7 +1068,7 @@ def build_html_report(
       return distribution;
     }
     function calculateMismatchPositionCounts(group) {
-      const hits = group.filter(row => !isNoHit(row));
+      const hits = group.filter(row => !isNoHit(row) && row.Hit_Status !== 'indeterminate');
       const primerSequence = group.find(row => row.Primer_Sequence)?.Primer_Sequence || '';
       const counts = Array.from({ length: primerSequence.length }, () => 0);
       const detailsByPosition = new Map();
@@ -1075,8 +1083,9 @@ def build_html_report(
     function calculatePrimerStats(group) {
       const totalRows = group.length;
       const role = roleForRow(group[0] || {});
-      const hitRows = group.filter(row => !isNoHit(row));
-      const noHits = totalRows - hitRows.length;
+      const hitRows = group.filter(row => !isNoHit(row) && row.Hit_Status !== 'indeterminate');
+      const noHits = group.filter(isNoHit).length;
+      const indeterminate = group.filter(row => row.Hit_Status === 'indeterminate').length;
       const mismatchValues = hitRows.map(row => parseNumber(row.Mismatches)).filter(value => value !== null);
       const identityValues = hitRows.map(row => parseNumber(row.Percent_Identity)).filter(value => value !== null);
       const avgMismatches = mismatchValues.length ? mismatchValues.reduce((a, b) => a + b, 0) / mismatchValues.length : 0;
@@ -1093,9 +1102,10 @@ def build_html_report(
       }).length;
       return {
         totalRows,
+        indeterminate,
         hits: hitRows.length,
         noHits,
-        noHitRate: totalRows ? noHits / totalRows : 0,
+        noHitRate: hitRows.length + noHits ? noHits / (hitRows.length + noHits) : 0,
         avgMismatches,
         maxMismatches,
         avgPercentIdentity,
@@ -1107,6 +1117,7 @@ def build_html_report(
       };
     }
     function calculateRisk(stats) {
+      if (stats.indeterminate && !stats.hits && !stats.noHits) return 'Indeterminate';
       if (
         stats.noHitRate >= RISK_THRESHOLDS.criticalNoHitRate ||
         stats.threePlusMismatchRate >= RISK_THRESHOLDS.criticalThreePlusMismatchRate ||
@@ -1122,6 +1133,7 @@ def build_html_report(
     }
     function riskExplanation(stats) {
       return [
+        t('status_indeterminate') + ': ' + stats.indeterminate,
         t('no_hit_rate') + ': ' + formatPercent(stats.noHitRate),
         t('max_mismatches') + ': ' + stats.maxMismatches,
         t('two_plus_rate') + ': ' + formatPercent(stats.twoPlusMismatchRate),
@@ -1144,6 +1156,7 @@ def build_html_report(
         [t('samples'), samples],
         [t('hits'), hits],
         [t('no_hits'), noHits],
+        [t('status_indeterminate'), data.filter(row => row.Hit_Status === 'indeterminate').length],
         [t('avg_identity'), avgIdentity]
       ].map(([label, value]) => '<div class="card"><h3>' + label + '</h3><div class="metric">' + value + '</div></div>').join('');
     }
@@ -1206,7 +1219,7 @@ def build_html_report(
         const rightViable = bestRight !== undefined && riskRank[bestRight] < riskRank.High;
         const risk = leftViable && rightViable
           ? (riskRank[bestLeft] >= riskRank[bestRight] ? bestLeft : bestRight)
-          : 'Critical';
+          : (bestLeft === 'Indeterminate' || bestRight === 'Indeterminate' ? 'Indeterminate' : 'Critical');
         const stats = calculatePrimerStats(group.rows);
         const directionStatus = t('direction_forward') + ': ' + (leftViable ? t('viable') + ' (' + t(bestLeft.toLowerCase()) + ')' : t('no_viable_primer')) +
           ' | ' + t('direction_reverse') + ': ' + (rightViable ? t('viable') + ' (' + t(bestRight.toLowerCase()) + ')' : t('no_viable_primer'));
@@ -1615,13 +1628,7 @@ def build_html_report(
 
 
 def write_html_report(results: list[dict], output_file: str, previous_reports: list[dict] | None = None):
-    if not results:
-        print("No results to write to HTML report.", file=sys.stderr)
-        return
-    try:
-        report_html = build_html_report(results, previous_reports=previous_reports)
-        with open(output_file, "w", encoding="utf-8") as htmlfile:
-            htmlfile.write(report_html)
-        print(f"HTML report successfully written to {output_file}")
-    except Exception as e:
-        print(f"Error writing HTML report: {e}", file=sys.stderr)
+    report_html = build_html_report(results, previous_reports=previous_reports)
+    with open(output_file, "w", encoding="utf-8") as htmlfile:
+        htmlfile.write(report_html)
+    print(f"HTML report successfully written to {output_file}")

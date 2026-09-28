@@ -115,6 +115,9 @@ python3 primer_checker.py \
 
 ## CLI usage
 
+For the SARS, RSV and influenza Nextflow modules, wrapper defaults, latest-image
+updates and synthetic tests, see [Routine pipeline integration](docs/PIPELINE_INTEGRATION.md).
+
 For a complete installation walkthrough, see **[CLI setup with Conda](docs/CLI.md)**.
 The downloadable **[environment.yml](public/environment.yml)** installs Python
 and BLAST+ for macOS or Linux (including Windows through WSL). A setup walkthrough

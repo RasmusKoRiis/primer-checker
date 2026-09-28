@@ -113,10 +113,12 @@ def main():
     all_results = []
     for fasta_file in args.fasta:
         if not os.path.exists(fasta_file):
-            print(f"FASTA file '{fasta_file}' not found. Skipping.", file=sys.stderr)
-            continue
+            sys.exit(f"FASTA file '{fasta_file}' not found.")
         print(f"Processing FASTA file: {fasta_file}")
-        file_results = process_fasta_file(fasta_file, virus_type, selected_primers, metadata_records=metadata_records)
+        file_results = process_fasta_file(
+            fasta_file, virus_type, selected_primers, metadata_records=metadata_records,
+            execution=BlastExecution(strict_errors=True),
+        )
         all_results.extend(file_results)
 
     write_csv_report(all_results, args.output)

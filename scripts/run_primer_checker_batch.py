@@ -139,6 +139,7 @@ def main() -> None:
                 virus_type,
                 selected_primers,
                 metadata_records=metadata_records,
+                execution=primer_analysis.BlastExecution(strict_errors=True),
             )
         )
 

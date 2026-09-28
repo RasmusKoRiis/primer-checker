@@ -1,0 +1,9 @@
+**
+!Dockerfile.cli
+!primer_checker.py
+!primer_analysis.py
+!primer_report.py
+!report_text/
+!report_text/*.json
+!scripts/
+!scripts/run_pipeline_primer_check.py
