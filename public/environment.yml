@@ -1,0 +1,16 @@
+# Primer Checker CLI only; the website and development tools are not required.
+# macOS (Intel / Apple Silicon), Linux, or Linux inside Windows WSL.
+# From the extracted repository:
+#   CONDA_CHANNEL_PRIORITY=strict conda env create -f public/environment.yml
+#   conda activate primer-checker
+name: primer-checker
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - blast=2.16.0
+variables:
+  # Prefer the active environment's BLAST over any local deployment bundle.
+  BLASTN_PATH: blastn

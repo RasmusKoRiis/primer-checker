@@ -1443,8 +1443,10 @@ def build_html_report(
       const body = document.getElementById('alignment-modal-body');
       const query = row.Query_Alignment || row.Primer_Sequence || '';
       const subject = row.Subject_Alignment || '';
+      const strand = Number(row.Subject_Start) <= Number(row.Subject_End) ? t('strand_forward') : t('strand_reverse');
+      const hitCoordinates = isNoHit(row) ? '' : t('local_hit_coordinates', { strand, start: row.Subject_Start, end: row.Subject_End });
       title.textContent = row.Subject_Sequence_ID || t('modal_title');
-      meta.textContent = [row.Primer_Name, row.Fasta_File, statusLabel(row), row.Mismatches ? row.Mismatches + ' ' + t('mismatches_word') : '', row.Mismatch_Details || ''].filter(Boolean).join(' | ');
+      meta.textContent = [row.Primer_Name, row.Fasta_File, statusLabel(row), hitCoordinates, row.Mismatches ? row.Mismatches + ' ' + t('mismatches_word') : '', row.Mismatch_Details || ''].filter(Boolean).join(' | ');
       if (isNoHit(row) || !subject) {
         body.innerHTML = '<div class="empty">' + t('no_alignment') + '</div>';
       } else {
@@ -1453,7 +1455,8 @@ def build_html_report(
           '<div class="alignment-row"><strong>' + t('primer') + '</strong><span>' + escapeHtml(query) + '</span></div>' +
           '<div class="alignment-row alignment-matchline"><strong></strong><span>' + escapeHtml(matchLine) + '</span></div>' +
           '<div class="alignment-row"><strong>' + t('sample') + '</strong><span>' + escapeHtml(subject) + '</span></div>' +
-          '</div><p class="section-note">' + t('mismatch_details') + ': ' + escapeHtml(row.Mismatch_Details || t('none')) + '</p>';
+          '</div><p class="section-note">' + t('alignment_orientation') + '</p>' +
+          '<p class="section-note">' + t('mismatch_details') + ': ' + escapeHtml(row.Mismatch_Details || t('none')) + '</p>';
       }
       modal.classList.add('open');
     }

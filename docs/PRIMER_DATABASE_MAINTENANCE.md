@@ -1,108 +1,73 @@
-# Primer Database Maintenance Proposal
+# Maintaining a primer database
 
-## Current problem
+The repository ships **synthetic dummy data only**. The website and batch runner
+use `primer_db/dummy_primers.json` by default. The invented sequences demonstrate
+PCR, NGS and influenza routing; they are not a validated assay library. No remote
+primer database is downloaded at runtime.
 
-The current primer database is easy to read but too implicit:
+## Bring your own primers
 
-```json
-{
-  "Influenza-B": {
-    "triplex_InfB_F_NS": "TCCTCAAYTCACTCTTCGAGCG"
-  }
-}
-```
+Use **Upload a database** or **Build a database** on the website. Enter each actual
+oligo in its 5′ → 3′ direction, including reverse primers. Download the resulting
+JSON for reuse. Uploads are temporary and do not replace the installed database.
 
-This stores only primer name and sequence. Important metadata such as segment, role, organism, scheme version, source, and references must be inferred from names. That makes updates fragile.
+The recommended self-contained format is schema `1.0` with `schemes[]`, a
+`database_version`, and a version for each scheme. Each primer has an `id`,
+`name`, `sequence`, `role`, and `segment`. PCR and NGS lists use the optional
+`assay_type` field. See the dummy JSON for a complete working example, or the
+website's database format preview for a smaller template.
 
-## Recommended database shape
+For influenza, use an organism such as `Influenza-A`, explicit segment labels,
+and `subtype_tags`. Untagged primers apply to every subtype of that organism;
+tagged primers apply to the exact selected tag. Header segment labels must match
+the database. The synthetic `primer_db/dummy-influenza.fasta` illustrates all
+eight standard Influenza-A segment labels; additional labels and subtypes work
+when supplied by your database.
 
-Keep supporting the legacy file, but add a normalized versioned format for future updates:
+## Keep dummy and real data distinct
 
-```json
-{
-  "schema_version": "1.0",
-  "database_version": "2026-05-06",
-  "schemes": [
-    {
-      "scheme_id": "fhi-influenza-b-triplex",
-      "display_name": "FHI Influenza B triplex",
-      "organism": "Influenza-B",
-      "version": "2026-05-06",
-      "status": "current",
-      "source": "FHI",
-      "references": [],
-      "primers": [
-        {
-          "id": "triplex_InfB_F_NS",
-          "name": "triplex_InfB_F_NS",
-          "sequence": "TCCTCAAYTCACTCTTCGAGCG",
-          "role": "forward_primer",
-          "segment": "NS",
-          "gene": "NS",
-          "pool": "triplex",
-          "strand": "plus",
-          "notes": ""
-        }
-      ]
-    }
-  ]
-}
-```
+The supplied JSON includes `purpose: "synthetic-test-only"`, a `dummy-1.0`
+version, and `DUMMY` in every assay and primer name. Keep those labels on test
+copies. The website preserves the purpose marker when this file is uploaded,
+and labels its result tables, HTML, CSV provenance and manifest accordingly.
 
-This format is now supported by `primer_checker.py`. The legacy FHI primer file was converted into:
+When creating a real library, replace all synthetic sequences and their labels,
+use your own versions and source information, and omit the synthetic purpose
+marker. Omission does not imply scientific validation. Validate your library
+and independently verify its suitability for your work.
 
-```text
-primer_db/fhi_primers.normalized.json
-```
+The old real library, panel assets, archive and generated report have been
+removed from the current branch. Existing Git history, other branches, old
+releases and old deployments are separate copies; removing current files does
+not remove those copies.
 
-## Easy update workflow
+## CLI workflow
 
-1. Edit one scheme file or an input spreadsheet/CSV, not the analysis code.
-2. If starting from the old legacy JSON, run:
+Convert a legacy organism → primer → sequence dictionary when needed:
 
 ```bash
 python3 scripts/convert_legacy_primers.py \
-  --input old_primers.json \
-  --output primer_db/fhi_primers.normalized.json \
-  --database-version 2026-05-06 \
-  --source FHI
+  --input /path/to/legacy-primers.json \
+  --output /path/to/my-primers.json \
+  --database-version 1.0 \
+  --source "Your laboratory"
+python3 primer_checker.py --primers /path/to/my-primers.json --validate-primers
 ```
 
-3. Run a converter if using CSV in the future:
+Record the exact database version used for an analysis and keep a copy in your
+own storage. The CLI also supports schema `3.0` and BED/FASTA-backed panels;
+`primer_db/assets/panel_database.example.json` is a small synthetic example.
+Asset paths resolve relative to the database JSON. Public website uploads must
+be self-contained.
+
+To run the bundled demonstration:
 
 ```bash
-python3 scripts/convert_primers_csv.py --input new_scheme.csv --output primer_db/schemes/influenza-b/fhi-triplex/2026-05-06.json
+python3 primer_checker.py \
+  --primers primer_db/dummy_primers.json --virus Demo-virus --assay-type pcr \
+  --fasta public/example.fasta --output result/dummy.csv --html-report result/dummy.html
 ```
 
-4. Validate before use:
-
-```bash
-python3 primer_checker.py --primers primer_db/schemes/influenza-b/fhi-triplex/2026-05-06.json --validate-primers
-```
-
-5. Run analysis using that exact versioned file.
-6. Keep old scheme versions in the repository for reproducibility.
-
-## Why this is easier to maintain
-
-- Adding a primer no longer depends on naming conventions.
-- Segment and role are explicit, so NS/HA/M filtering is safer.
-- Old versions can be retained and rerun.
-- Validation can catch invalid IUPAC characters, missing metadata, duplicate IDs, and unsupported segments before analysis.
-- Reports can eventually include `database_version`, `scheme_id`, and `scheme_version`.
-
-## Suggested implementation steps
-
-Completed:
-
-- Added support for the normalized JSON shape in the existing loader.
-- Kept legacy JSON support as compatibility mode.
-- Added pure-Python validation for required normalized fields.
-- Added a converter from the current legacy format to normalized JSON.
-- Converted the current FHI primer database into `primer_db/fhi_primers.normalized.json`.
-
-Remaining:
-
-- Optionally add CSV-to-JSON conversion for easier non-programmer updates.
-- Add a JSON Schema file if external validation tooling becomes useful.
-- Add report columns for `database_version`, `scheme_id`, and `scheme_version` if downstream consumers want them.
+Expected: two records, three primers, six hits, one `9:T>A` mismatch, and reverse
+primer hits with decreasing subject coordinates. Assay and primer names retain
+`DUMMY` in CLI CSV and HTML output, and the CLI prints a dummy-data notice.

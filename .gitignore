@@ -1,6 +1,19 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+.next/
+out/
+node_modules/
+.vercel/
+.env*
+!.env.example
+*.tsbuildinfo
+bin/blastn
+bin/lib/
+bin/manifest.json
+playwright-report/
+test-results/
 
 # Generated primer-checker outputs
 primer_report.csv

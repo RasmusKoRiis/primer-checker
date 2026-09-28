@@ -35,8 +35,7 @@ def main():
     parser.add_argument(
         "--flu-type",
         type=str,
-        choices=["A", "H1", "H3", "B"],
-        help="For influenza, specify subtype: A (full A-panel), H1, H3 or B."
+        help="Influenza type or subtype from the database, e.g. A (all A primers), H5N1, or B/VICTORIA."
     )
     parser.add_argument(
         "--assay-type",
@@ -85,6 +84,8 @@ def main():
 
     primer_records, validation = load_primer_records(args.primers)
     print_validation_messages(validation)
+    if load_primer_library(args.primers).get("purpose") == "synthetic-test-only":
+        print("DUMMY DATABASE: synthetic software test data only.", file=sys.stderr)
     if args.validate_primers:
         print(f"Primer library validation succeeded for {args.primers}")
         return

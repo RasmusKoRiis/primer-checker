@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from pathlib import Path
 
 # --- Ambiguous Nucleotide Handling ---
 AMBIGUITY_CODES = {
@@ -31,7 +33,10 @@ AMBIGUITY_CODES = {
     'N': {'A', 'C', 'G', 'T'}
 }
 ALLOWED_SEQUENCE_CODES = set(AMBIGUITY_CODES)
-INFLUENZA_SEGMENTS = {"HA", "M", "NS"}
+# Suggestions for legacy name inference only; explicit database segments are not restricted to this list.
+LEGACY_INFLUENZA_SEGMENTS = ("HA", "NS", "M", "PB2", "PB1", "PA", "NP", "NA", "HEF", "P3")
+SEGMENT_PATTERN = r"[A-Za-z0-9]{1,32}"
+SUBTYPE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
 CSV_FIELDNAMES = [
     "Fasta_File",
     "Virus_Type",
@@ -67,6 +72,46 @@ CSV_FIELDNAMES = [
     "Ct_Source",
 ]
 BLAST_MAX_TARGET_SEQS = "5000"
+
+
+class BlastError(RuntimeError):
+    """BLAST could not complete; distinct from a successful search with no hits."""
+
+
+class BlastUnavailableError(BlastError):
+    pass
+
+
+class AnalysisTimeoutError(BlastError):
+    pass
+
+
+@dataclass(frozen=True)
+class BlastExecution:
+    """Optional web execution policy; does not change alignment parameters."""
+    executable: str | None = None
+    deadline: float | None = None
+    strict_errors: bool = False
+    quiet: bool = False
+
+
+def resolve_blastn() -> str:
+    configured = os.environ.get("BLASTN_PATH")
+    bundled = Path(__file__).resolve().parent / "bin" / "blastn"
+    candidate = configured or (str(bundled) if bundled.is_file() else "blastn")
+    resolved = shutil.which(candidate)
+    if not resolved:
+        raise BlastUnavailableError("BLAST executable unavailable. Install BLAST+ or configure BLASTN_PATH.")
+    return resolved
+
+
+def blast_environment(executable: str) -> dict[str, str] | None:
+    """Resolve adjacent packaged libraries without changing process-wide state."""
+    libraries = Path(executable).resolve().parent / "lib"
+    if sys.platform != "linux" or not libraries.is_dir():
+        return None
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    return {**os.environ, "LD_LIBRARY_PATH": str(libraries) + (os.pathsep + existing if existing else "")}
 
 
 @dataclass(frozen=True)
@@ -131,6 +176,8 @@ def count_mismatches(query_aln: str, subject_aln: str) -> int:
     using ambiguous nucleotide matching. Gaps ('-') are treated as mismatches.
     Both input strings should be of equal length.
     """
+    if len(query_aln) != len(subject_aln):
+        raise ValueError("Aligned primer and subject must have the same number of columns.")
     mismatches = 0
     for a, b in zip(query_aln, subject_aln):
         if a == '-' or b == '-' or not bases_match(a, b):
@@ -190,10 +237,16 @@ def reconstruct_full_primer_alignment(
     bases. For reporting, those omitted bases are important because terminal
     mismatches can affect primer performance.
     """
+    # Keep BLAST's query gaps: dropping them shifts every subsequent column.
+    # Retain the original oligo bases (including IUPAC codes) in those columns.
+    primer_seq = primer_seq.upper()
+    aligned_bases = iter(primer_seq[qstart - 1:qend])
+    gapped_primer = "".join("-" if base == "-" else next(aligned_bases) for base in qseq)
+    query_alignment = primer_seq[:qstart - 1] + gapped_primer + primer_seq[qend:]
     missing_start = qstart - 1
     missing_end = len(primer_seq) - qend
     if not subject_sequence:
-        return primer_seq, (
+        return query_alignment, (
             ("-" * missing_start)
             + sseq.upper()
             + ("-" * missing_end)
@@ -214,7 +267,25 @@ def reconstruct_full_primer_alignment(
         right = reverse_complement(subject_sequence[right_start:max(0, send - 1)])
         right = _pad_right(right, missing_end)
 
-    return primer_seq.upper(), left + sseq.upper() + right
+    return query_alignment, left + sseq.upper() + right
+
+
+def mismatch_events(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str):
+    """Yield primer positions and differing aligned bases in oligo orientation.
+
+    Insertions are anchored to the preceding primer base (position 1 if before
+    the first base); query gaps never advance primer numbering.
+    """
+    for pos in range(1, qstart):
+        yield pos, full_primer[pos - 1].upper(), "-"
+    pos = qstart - 1
+    for q_base, s_base in zip(qseq.upper(), sseq.upper()):
+        if q_base != "-":
+            pos += 1
+        if q_base == "-" or s_base == "-" or not bases_match(q_base, s_base):
+            yield max(1, pos), q_base, s_base
+    for pos in range(qend + 1, len(full_primer) + 1):
+        yield pos, full_primer[pos - 1].upper(), "-"
 
 
 def get_mismatch_positions(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str) -> str:
@@ -226,23 +297,8 @@ def get_mismatch_positions(qseq: str, sseq: str, qstart: int, qend: int, full_pr
     positions before qstart or after qend) are included.
     Returns a comma-separated string of mismatch positions.
     """
-    mismatches = []
-
-    # Check aligned region positions.
-    for i, (q_base, s_base) in enumerate(zip(qseq, sseq)):
-        pos = qstart + i  # position in full primer (1-indexed)
-        if q_base == '-' or s_base == '-' or not bases_match(q_base, s_base):
-            mismatches.append(pos)
-
-    # Include positions for missing bases at the beginning.
-    for pos in range(1, qstart):
-        mismatches.append(pos)
-    # Include positions for missing bases at the end.
-    for pos in range(qend+1, len(full_primer)+1):
-        mismatches.append(pos)
-
-    mismatches = sorted(mismatches)
-    return ",".join(map(str, mismatches)) if mismatches else ""
+    positions = {pos for pos, _q, _s in mismatch_events(qseq, sseq, qstart, qend, full_primer)}
+    return ",".join(map(str, sorted(positions)))
 
 
 def get_mismatch_details(qseq: str, sseq: str, qstart: int, qend: int, full_primer: str) -> str:
@@ -250,19 +306,13 @@ def get_mismatch_details(qseq: str, sseq: str, qstart: int, qend: int, full_prim
     Return comma-separated mismatch details as position:primer_base>subject_base.
     Bases outside partial BLAST alignment are represented as subject gaps.
     """
-    details = []
-    for i, (q_base, s_base) in enumerate(zip(qseq, sseq)):
-        pos = qstart + i
-        if q_base == '-' or s_base == '-' or not bases_match(q_base, s_base):
-            primer_base = full_primer[pos - 1] if 1 <= pos <= len(full_primer) else q_base
-            details.append((pos, f"{pos}:{primer_base.upper()}>{s_base.upper()}"))
-
-    for pos in range(1, qstart):
-        details.append((pos, f"{pos}:{full_primer[pos - 1].upper()}>-"))
-    for pos in range(qend + 1, len(full_primer) + 1):
-        details.append((pos, f"{pos}:{full_primer[pos - 1].upper()}>-"))
-
-    return ",".join(detail for _pos, detail in sorted(details))
+    # One entry per anchor keeps report percentages bounded by hit count, even
+    # for a multi-base insertion or a substitution followed by an insertion.
+    details: dict[int, tuple[str, str]] = {}
+    for pos, q_base, s_base in mismatch_events(qseq, sseq, qstart, qend, full_primer):
+        query, subject = details.get(pos, ("", ""))
+        details[pos] = (query + q_base.replace("-", ""), subject + s_base.replace("-", ""))
+    return ",".join(f"{pos}:{query or '-'}>{subject or '-'}" for pos, (query, subject) in sorted(details.items()))
 
 # --- End Ambiguity Functions ---
 
@@ -282,7 +332,7 @@ def infer_primer_segment(organism: str, primer_name: str) -> str:
     if not organism.upper().startswith("INFLUENZA"):
         return ""
     tokens = tokenize_name(primer_name)
-    for segment in ("HA", "NS", "M"):
+    for segment in LEGACY_INFLUENZA_SEGMENTS:
         if segment in tokens:
             return segment
     return ""
@@ -290,32 +340,79 @@ def infer_primer_segment(organism: str, primer_name: str) -> str:
 
 def infer_subtype_tags(primer_name: str) -> tuple[str, ...]:
     tokens = tokenize_name(primer_name)
-    return tuple(tag for tag in ("H1", "H3") if tag in tokens)
+    return tuple(sorted({tag for tag in tokens if re.fullmatch(r"H[1-9]\d*(?:N[1-9]\d*)?|N[1-9]\d*", tag)}))
 
 
-def infer_analysis_target_from_filename(fasta_file: str, available_organisms: list[str] | None = None) -> AnalysisTarget | None:
+def read_subtype_tags(metadata: dict, primer_name: str) -> tuple[str, ...]:
+    """Explicit [] means untagged; infer legacy names only when the field is absent."""
+    tags = metadata.get("subtype_tags", infer_subtype_tags(primer_name))
+    return tuple(dict.fromkeys(tag.strip().upper() for tag in tags))
+
+
+def validate_selection_metadata(metadata: dict, organism: str, context: str, result: ValidationResult, require_segment: bool = True):
+    segment = metadata.get("segment", "")
+    if segment is None:
+        segment = ""
+    if not isinstance(segment, str):
+        result.errors.append(f"{context} field 'segment' must be a string.")
+    elif isinstance(organism, str) and organism.upper().startswith("INFLUENZA"):
+        if (segment or require_segment) and not re.fullmatch(SEGMENT_PATTERN, segment.strip()):
+            result.errors.append(f"{context}: influenza segments must contain 1–32 letters or digits and match FASTA segment labels.")
+    if "subtype_tags" in metadata:
+        tags = metadata["subtype_tags"]
+        if not isinstance(tags, list) or len(tags) > 32 or any(
+            not isinstance(tag, str) or not re.fullmatch(SUBTYPE_PATTERN, tag.strip()) for tag in tags
+        ):
+            result.errors.append(f"{context}: subtype_tags must be a list of at most 32 labels, each 1–64 letters, digits, dots, underscores, or hyphens, starting with a letter or digit.")
+
+
+def infer_analysis_target_from_filename(
+    fasta_file: str,
+    available_organisms: list[str] | None = None,
+    primer_records: dict[str, list[PrimerRecord]] | None = None,
+) -> AnalysisTarget | None:
     """
     Infer the primer target from a FASTA filename.
 
-    This is intentionally conservative: H1/H3 influenza subtype rules are applied
-    before broader Influenza-A rules, and ambiguous RSV names without A/B are left
-    unclassified because the primer database stores RSV-A and RSV-B separately.
+    Prefer exact subtype labels in the loaded database. Ambiguous subtype names
+    and RSV filenames without A/B are left unclassified.
     """
     stem = os.path.splitext(os.path.basename(fasta_file))[0]
     upper_stem = stem.upper()
     tokens = set(tokenize_name(stem))
     compact = re.sub(r"[^A-Z0-9]+", "", upper_stem)
 
+    if primer_records is not None:
+        choices = influenza_selections(primer_records)
+        matching = [key for key, choice in choices.items() if choice["tag"] and re.search(
+            rf"(?<![A-Z0-9]){re.escape(choice['tag'])}(?![A-Z0-9])", upper_stem
+        )]
+        if not matching:
+            # Preserve H1N1 -> H1 / H3N2 -> H3 when only an H-family tag exists.
+            h_families = {re.match(r"H[1-9]\d*", token).group() for token in tokens
+                          if re.fullmatch(r"H[1-9]\d*N[1-9]\d*", token)}
+            matching = [tag for tag in h_families if tag in choices and choices[tag]["tag"] == tag]
+        if len(matching) == 1:
+            return AnalysisTarget("influenza", matching[0], f"filename matches database subtype '{matching[0]}'")
+        if matching or any(re.fullmatch(r"H[1-9]\d*(?:N[1-9]\d*)?", token) for token in tokens):
+            return None
+        for key, choice in choices.items():
+            if choice["tag"] is not None:
+                continue
+            markers = {f"INF{key}", f"FLU{key}", f"INFLUENZA{key}"}
+            if tokens & markers or any(compact.startswith(marker) for marker in markers):
+                return AnalysisTarget("influenza", key, f"filename contains Influenza-{key} marker")
+
     has_h3 = "H3" in tokens or "H3N2" in tokens or bool(re.search(r"(^|[^A-Z0-9])H3(N2)?($|[^A-Z0-9])", upper_stem))
     has_h1 = "H1" in tokens or "H1N1" in tokens or bool(re.search(r"(^|[^A-Z0-9])H1(N1)?($|[^A-Z0-9])", upper_stem))
-    if has_h3:
+    if primer_records is None and has_h3:
         return AnalysisTarget("influenza", "H3", "filename contains H3/H3N2")
-    if has_h1:
+    if primer_records is None and has_h1:
         return AnalysisTarget("influenza", "H1", "filename contains H1/H1N1")
 
-    if tokens & {"INFB", "FLUB"} or compact in {"INFB", "FLUB", "INFLUENZAB"} or compact.startswith(("INFB", "FLUB")):
+    if primer_records is None and (tokens & {"INFB", "FLUB"} or compact.startswith(("INFB", "FLUB", "INFLUENZAB"))):
         return AnalysisTarget("influenza", "B", "filename contains Influenza-B marker")
-    if tokens & {"INFA", "FLUA"} or compact in {"INFA", "FLUA", "INFLUENZAA"} or compact.startswith(("INFA", "FLUA")):
+    if primer_records is None and (tokens & {"INFA", "FLUA"} or compact.startswith(("INFA", "FLUA", "INFLUENZAA"))):
         return AnalysisTarget("influenza", "A", "filename contains Influenza-A marker")
 
     if tokens & {"RSVA", "RSV-A"} or compact.startswith("RSVA"):
@@ -570,6 +667,7 @@ def build_metadata_matches(
     subject_ids: list[str],
     metadata_records: list[MetadataRecord],
     fasta_file: str,
+    quiet: bool = False,
 ) -> dict[str, MetadataRecord]:
     if not metadata_records:
         return {}
@@ -583,7 +681,7 @@ def build_metadata_matches(
         elif status == "ambiguous":
             ambiguous.append(subject_id)
 
-    if ambiguous:
+    if ambiguous and not quiet:
         preview = ", ".join(ambiguous[:5])
         suffix = "..." if len(ambiguous) > 5 else ""
         print(
@@ -713,7 +811,7 @@ def validate_legacy_primer_library(primer_library: object) -> ValidationResult:
                 sequences_seen[normalized_sequence] = primer_name
 
             if organism.upper().startswith("INFLUENZA") and not infer_primer_segment(organism, primer_name):
-                result.warnings.append(f"{context} has no inferable HA, M, or NS segment in the legacy primer name.")
+                result.warnings.append(f"{context} has no inferable influenza segment in the legacy primer name; use explicit segment metadata for custom labels.")
 
             if infer_primer_role(primer_name) == "probe":
                 result.warnings.append(f"{context} appears to be a probe; the legacy format cannot store role metadata explicitly.")
@@ -1031,6 +1129,7 @@ def validate_panel_primer_library(primer_library: object, library_file: str | No
         for field_name in ("display_name", "organism", "panel_version"):
             if field_name in panel and (not isinstance(panel[field_name], str) or not panel[field_name].strip()):
                 result.errors.append(f"{context} field '{field_name}' must be a non-empty string.")
+        validate_selection_metadata(panel, panel.get("organism", ""), context, result, require_segment=False)
         files = panel.get("files")
         if not isinstance(files, dict):
             result.errors.append(f"{context} field 'files' must be an object.")
@@ -1084,7 +1183,7 @@ def panel_library_to_records(primer_library: dict, library_file: str, validation
                     sequence=sequence,
                     segment=(panel.get("segment") or "").strip().upper(),
                     role=panel_primer_role(name, entry, pattern_roles),
-                    subtype_tags=tuple(panel.get("subtype_tags") or infer_subtype_tags(name)),
+                    subtype_tags=read_subtype_tags(panel, name),
                     scheme_id=panel_id,
                     scheme_version=panel_version,
                     database_version=database_version,
@@ -1115,7 +1214,7 @@ def panel_library_to_records(primer_library: dict, library_file: str, validation
                     sequence=sequence,
                     segment=(panel.get("segment") or "").strip().upper(),
                     role=panel_primer_role(name, entry, pattern_roles),
-                    subtype_tags=tuple(panel.get("subtype_tags") or infer_subtype_tags(name)),
+                    subtype_tags=read_subtype_tags(panel, name),
                     scheme_id=panel_id,
                     scheme_version=panel_version,
                     database_version=database_version,
@@ -1196,6 +1295,9 @@ def validate_normalized_primer_library(primer_library: object) -> ValidationResu
             if field_name in scheme and (not isinstance(scheme[field_name], str) or not scheme[field_name].strip()):
                 result.errors.append(f"{context} field '{field_name}' must be a non-empty string.")
 
+        if scheme.get("assay_type", "pcr") not in ("pcr", "ngs"):
+            result.errors.append(f"{context} field 'assay_type' must be 'pcr' or 'ngs'.")
+
         primers = scheme.get("primers")
         if not isinstance(primers, list) or not primers:
             result.errors.append(f"{context} field 'primers' must be a non-empty list.")
@@ -1242,13 +1344,7 @@ def validate_normalized_primer_library(primer_library: object) -> ValidationResu
             else:
                 sequences_seen[normalized_sequence] = str(primer_name)
 
-            segment = primer.get("segment", "")
-            if segment is None:
-                segment = ""
-            if not isinstance(segment, str):
-                result.errors.append(f"{primer_context} field 'segment' must be a string.")
-            elif organism.upper().startswith("INFLUENZA") and segment.upper() not in INFLUENZA_SEGMENTS:
-                result.errors.append(f"{primer_context} has unsupported influenza segment '{segment}'.")
+            validate_selection_metadata(primer, organism, primer_context, result)
 
     return result
 
@@ -1262,7 +1358,7 @@ def normalized_library_to_records(primer_library: dict) -> dict[str, list[Primer
         scheme_version = scheme["version"]
         records = records_by_organism.setdefault(organism, [])
         for primer in scheme["primers"]:
-            subtype_tags = tuple(primer.get("subtype_tags") or infer_subtype_tags(primer.get("name", "")))
+            subtype_tags = read_subtype_tags(primer, primer.get("name", ""))
             records.append(
                 PrimerRecord(
                     organism=organism,
@@ -1276,7 +1372,7 @@ def normalized_library_to_records(primer_library: dict) -> dict[str, list[Primer
                     database_version=database_version,
                     pool=(primer.get("pool") or "").strip(),
                     strand=(primer.get("strand") or "").strip(),
-                    assay_type="pcr",
+                    assay_type=scheme.get("assay_type", "pcr"),
                     assay_name=scheme["display_name"],
                 )
             )
@@ -1392,57 +1488,42 @@ def load_primer_library(library_file: str) -> dict:
         sys.exit(f"Error loading primer library from {library_file}: {e}")
 
 def build_influenza_subtype_primers(primer_library: dict, subtype: str) -> dict:
+    """Compatibility helper using the same database-driven selection as the CLI/API."""
+    selected = build_influenza_subtype_records(legacy_library_to_records(primer_library), subtype)
+    names = {(record.organism, record.name) for record in selected}
+    return {name: sequence for organism, primers in primer_library.items() for name, sequence in primers.items()
+            if (organism, name.strip()) in names}
+
+
+def influenza_selections(primer_records: dict[str, list[PrimerRecord]]) -> dict[str, dict]:
+    """Available types and exact subtype labels, derived only from loaded records.
+
+    A-subtypes retain H1/H3-style IDs for compatibility. Other types use B/VIC,
+    C/label, etc. so labels shared by different organisms cannot be mixed.
     """
-    Legacy dict helper for selecting Influenza-A H1/H3 primers.
-
-    H1/H3 use primer names tagged for that subtype plus untagged Influenza-A
-    primer names, and exclude names tagged for the other subtype.
-    """
-    generic = primer_library.get("Influenza-A")
-    if generic is None:
-        sys.exit("Primer JSON lacks the 'Influenza-A' section.")
-
-    subtype = subtype.upper()
-    if subtype == "A":
-        return generic  # full A panel
-
-    if subtype in {"H1", "H3"}:
-        subset = {}
-        for primer_name, sequence in generic.items():
-            tags = infer_subtype_tags(primer_name)
-            if subtype in tags or not tags:
-                subset[primer_name] = sequence
-        if not subset:
-            sys.exit(f"No {subtype} primers found inside 'Influenza-A'.")
-        return subset
-
-    sys.exit(f"Unsupported Influenza-A subtype '{subtype}'.")
+    groups = {}
+    for organism, records in primer_records.items():
+        match = re.fullmatch(r"Influenza-([A-Za-z0-9]+)", organism, re.IGNORECASE)
+        if match and records:
+            groups[match.group(1).upper()] = organism
+    choices = {}
+    for flu_type, organism in sorted(groups.items()):
+        choices[flu_type] = {"organism": organism, "tag": None}
+        tags = sorted({tag for p in primer_records[organism] for tag in p.subtype_tags})
+        for tag in tags:
+            key = tag if flu_type == "A" and tag not in groups else f"{flu_type}/{tag}"
+            choices[key] = {"organism": organism, "tag": tag}
+    return choices
 
 
 def build_influenza_subtype_records(primer_records: dict[str, list[PrimerRecord]], subtype: str) -> list[PrimerRecord]:
-    """
-    Select Influenza-A records for A, H1, or H3. H1/H3 include subtype-specific
-    records plus records without subtype tags, and exclude records tagged for the
-    other subtype.
-    """
-    generic = primer_records.get("Influenza-A")
-    if generic is None:
-        sys.exit("Primer JSON lacks the 'Influenza-A' section.")
-
-    subtype = subtype.upper()
-    if subtype == "A":
-        return generic
-
-    if subtype in {"H1", "H3"}:
-        subset = [
-            record for record in generic
-            if subtype in record.subtype_tags or not record.subtype_tags
-        ]
-        if not subset:
-            sys.exit(f"No {subtype} primers found inside 'Influenza-A'.")
-        return subset
-
-    sys.exit(f"Unsupported Influenza-A subtype '{subtype}'.")
+    """Select the database's exact subtype tag plus untagged primers of that type."""
+    choices = influenza_selections(primer_records)
+    selection = choices.get(subtype.strip().upper())
+    if selection is None:
+        sys.exit(f"Influenza selection '{subtype}' is not in the database. Available: {', '.join(choices)}.")
+    return [record for record in primer_records[selection["organism"]]
+            if selection["tag"] is None or not record.subtype_tags or selection["tag"] in record.subtype_tags]
 
 
 def _filter_assay_records(
@@ -1483,15 +1564,9 @@ def select_primer_records(
         return canonical_virus, _filter_assay_records(selected, assay_type, assay_id)
 
     if not flu_type:
-        sys.exit("Error: for influenza please supply --flu-type A, H1, H3 or B.")
+        sys.exit(f"For influenza supply --flu-type from the database: {', '.join(influenza_selections(primer_records))}.")
 
-    subtype = flu_type.upper()
-    if subtype == "B":
-        selected = primer_records.get("Influenza-B")
-        if not selected:
-            sys.exit("Primer JSON lacks the 'Influenza-B' section.")
-        return "Influenza-B", _filter_assay_records(selected, assay_type, assay_id)
-
+    subtype = flu_type.strip().upper()
     selected = build_influenza_subtype_records(primer_records, subtype)
     return f"Influenza-{subtype}", _filter_assay_records(selected, assay_type, assay_id)
 
@@ -1523,8 +1598,10 @@ def get_subject_ids(fasta_file: str) -> list:
 
 
 def ensure_blastn_available():
-    if shutil.which("blastn") is None:
-        sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+    try:
+        return resolve_blastn()
+    except BlastUnavailableError as exc:
+        sys.exit(f"Error: {exc}")
 
 
 def run_blastn(
@@ -1532,6 +1609,7 @@ def run_blastn(
     primer_seq: str,
     subject_file: str,
     subject_sequences: dict[str, str] | None = None,
+    execution: BlastExecution | None = None,
 ) -> dict:
     """
     Run BLASTn with the primer (query) against the subject FASTA file.
@@ -1542,13 +1620,25 @@ def run_blastn(
     Percent identity is recalculated over the full primer length.
     Returns a dictionary mapping each subject sequence ID (sseqid) to the best alignment.
     """
+    execution = execution or BlastExecution()
+    try:
+        executable = execution.executable or resolve_blastn()
+    except BlastUnavailableError:
+        if execution.strict_errors:
+            raise
+        sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+    timeout = None
+    if execution.deadline is not None:
+        timeout = execution.deadline - time.monotonic()
+        if timeout <= 0:
+            raise AnalysisTimeoutError("Analysis timed out. Try fewer files or select a single assay.")
     query_filename = ""
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".fasta") as tmp_query:
         tmp_query.write(f">{primer_name}\n{primer_seq}\n")
         query_filename = tmp_query.name
 
     blast_command = [
-        "blastn",
+        executable,
         "-query", query_filename,
         "-subject", subject_file,
         "-reward", "2",
@@ -1566,15 +1656,27 @@ def run_blastn(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                check=False
+                check=False,
+                timeout=timeout,
+                env=blast_environment(executable),
             )
         except FileNotFoundError:
+            if execution.strict_errors:
+                raise BlastUnavailableError("BLAST executable unavailable.") from None
             sys.exit("Error: blastn command not found. Please install BLAST+ and ensure blastn is in your PATH.")
+        except subprocess.TimeoutExpired:
+            raise AnalysisTimeoutError("Analysis timed out. Try fewer files or select a single assay.") from None
+        except OSError:
+            if execution.strict_errors:
+                raise BlastUnavailableError("BLAST executable could not start.") from None
+            raise
     finally:
         if query_filename and os.path.exists(query_filename):
             os.remove(query_filename)
 
     if result.returncode != 0:
+        if execution.strict_errors:
+            raise BlastError("BLAST analysis failed. Check the input or try a smaller analysis.")
         print(f"BLASTn error for primer '{primer_name}' against {subject_file}:\n{result.stderr}", file=sys.stderr)
         return {}
 
@@ -1648,7 +1750,7 @@ def run_blastn(
                 hits_by_subject[sseqid] = current_hit
     return hits_by_subject
 
-def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, virus_type: str, fasta_file: str) -> list[str]:
+def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, virus_type: str, fasta_file: str, quiet: bool = False) -> list[str]:
     if not virus_type.upper().startswith("INFLUENZA") or not primer.segment:
         return subject_ids
 
@@ -1661,7 +1763,7 @@ def filter_subject_ids_for_primer(subject_ids: list[str], primer: PrimerRecord, 
         elif not subject_segment:
             unparseable_count += 1
 
-    if unparseable_count:
+    if unparseable_count and not quiet:
         print(
             f"Warning: {unparseable_count} subject header(s) in {fasta_file} had no parseable influenza segment "
             f"while filtering primer '{primer.name}' for segment {primer.segment}.",
@@ -1675,6 +1777,8 @@ def process_fasta_file(
     virus_type: str,
     primers: list[PrimerRecord],
     metadata_records: list[MetadataRecord] | None = None,
+    *,
+    execution: BlastExecution | None = None,
 ) -> list:
     """
     For a given FASTA file and virus type, run BLASTn for each primer.
@@ -1682,6 +1786,7 @@ def process_fasta_file(
     For Influenza, if a primer record has an intended segment, only subject
     sequences with that segment are reported.
     """
+    execution = execution or BlastExecution()
     results = []
     if not primers:
         print(f"No primer information available for virus type '{virus_type}'.", file=sys.stderr)
@@ -1689,14 +1794,15 @@ def process_fasta_file(
 
     subject_sequences = read_fasta_sequences(fasta_file)
     subject_ids = get_subject_ids(fasta_file)
-    metadata_matches = build_metadata_matches(subject_ids, metadata_records or [], fasta_file)
+    metadata_matches = build_metadata_matches(subject_ids, metadata_records or [], fasta_file, quiet=execution.quiet)
 
     for primer in primers:
         primer_seq = primer.sequence.upper()
-        print(f"Running BLASTn for primer '{primer.name}' on file '{fasta_file}' ...")
+        if not execution.quiet:
+            print(f"Running BLASTn for primer '{primer.name}' on file '{fasta_file}' ...")
 
-        filtered_subject_ids = filter_subject_ids_for_primer(subject_ids, primer, virus_type, fasta_file)
-        hits_by_subject = run_blastn(primer.name, primer_seq, fasta_file, subject_sequences=subject_sequences)
+        filtered_subject_ids = filter_subject_ids_for_primer(subject_ids, primer, virus_type, fasta_file, quiet=execution.quiet)
+        hits_by_subject = run_blastn(primer.name, primer_seq, fasta_file, subject_sequences=subject_sequences, execution=execution)
 
         for subject in filtered_subject_ids:
             subject_segment = get_segment(subject)
@@ -1766,6 +1872,13 @@ def process_fasta_file(
             results.append(result_row)
     return results
 
+def write_csv_rows(results: list, stream, *, extra_fieldnames: tuple[str, ...] = ()):
+    """Serialize the canonical CSV columns to a file or in-memory text stream."""
+    writer = csv.DictWriter(stream, fieldnames=[*CSV_FIELDNAMES, *extra_fieldnames], extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(results)
+
+
 def write_csv_report(results: list, output_file: str):
     """Write the results to a CSV file."""
     if not results:
@@ -1774,10 +1887,7 @@ def write_csv_report(results: list, output_file: str):
 
     try:
         with open(output_file, "w", newline="") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
-            writer.writeheader()
-            for row in results:
-                writer.writerow(row)
+            write_csv_rows(results, csvfile)
         print(f"Report successfully written to {output_file}")
     except Exception as e:
         print(f"Error writing CSV file: {e}", file=sys.stderr)
