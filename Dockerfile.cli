@@ -1,7 +1,8 @@
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y ncbi-blast+ \
+    # Nextflow's task metrics wrapper requires ps, supplied by procps.
+    && apt-get install --no-install-recommends -y ncbi-blast+ procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/primer-checker

@@ -1,8 +1,8 @@
 # Routine Nextflow integration
 
 The routine wrappers enable PCR checks for influenza and PCR plus NGS checks
-for SARS-CoV-2 and RSV. Bare pipeline invocations remain opt-in with
-`--primer_check true`. PCR and NGS run as independent tasks, each with
+for SARS-CoV-2 and RSV. Direct pipeline invocations can use
+`--primer_check true --primer_check_pcr /path/to/database`. PCR and NGS run as independent tasks, each with
 `errorStrategy 'ignore'`. A technical failure in either task does not stop the
 sequencing workflow or suppress the other assay's outputs.
 
@@ -19,8 +19,12 @@ PCR locations are defined in the wrappers, not in pipeline defaults:
 Use `-P /path/to/primers.json` or `-P /path/to/pcr-primers` to override.
 A directory loads all its top-level `*.json` databases in sorted order;
 duplicate organism/assay/primer combinations are rejected. Keep any referenced
-assets alongside their JSON at the original relative paths. Do not put example
-databases in the production database directory.
+assets alongside their JSON at the original relative paths when using the full
+library. Pipeline PCR checks load PCR schemes only: NGS panels in a unified JSON
+do not require their BED/FASTA assets to be copied into the PCR database directory.
+The independent NGS check uses the sequencing scheme directory described below.
+PCR entries are still validated. Do not put example databases in the production
+database directory.
 
 SARS reuses the sequencing scheme selected with `-p`. RSV reuses
 `/mnt/tempdata/rsv_db/assets/primer_schemes`, selecting `RSVA/<scheme>` or
@@ -45,7 +49,9 @@ are omitted if the interval length does not match the actual oligo length.
 
 ## Latest version and first deployment
 
-`Dockerfile.cli` packages the Python CLI, BLAST and report resources. The
+`Dockerfile.cli` packages the Python CLI, BLAST, report resources, and `procps`.
+Nextflow uses `ps` from `procps` to collect task metrics; without it, traced
+container tasks can fail before the primer-checker command starts. The
 `cli-container.yml` GitHub Actions workflow tests and publishes every push to
 `main` as `ghcr.io/rasmuskoriis/primer-checker:latest` and an immutable commit tag.
 Make the GHCR package readable by the analysis server (public visibility, or
@@ -81,15 +87,28 @@ It disables the automatic image pull; the runtime still needs Python and BLAST.
 
 ## Routing and outputs
 
-The integration consumes declared consensus channels. Influenza runs after
-header configuration and before whole-segment coverage filtering. Its subtype
-file selects H1/H3/B PCR primers using the database's available subtype labels.
+The integration runs after the report process and analyses the final combined
+run FASTA. Influenza's normal report FASTA contains only segments that passed
+coverage filtering. Its subtype file selects H1/H3/B PCR primers using the
+database's available subtype labels.
 `H1N1`/`H3N2` can map to legacy `H1`/`H3`; `VIC`/`VICVIC` map to B/Victoria when
 present, otherwise type B. Segment matching accepts fluseq's subtype suffixes
 and treats M/MP as equivalent. RSV uses `meta.subtype`; unknown RSV is never
-silently treated as RSV-A. SARS uses its ARTIC consensus, with the FASTA workflow
-also supported. Human influenza FASTA mode is supported; avian workflows are
-outside this integration.
+silently treated as RSV-A. SARS and RSV use their final report FASTAs. SARS and
+human influenza FASTA workflows also emit a combined FASTA for this check;
+the influenza drug-resistance mode exports its configured consensuses without
+the normal coverage filter. Avian workflows are outside this integration.
+
+Upstream consensus headers supply an explicit record-to-sample mapping; their
+sequences are not analysed. Records missing from the final export are omitted,
+and samples with no retained records have `no_consensus` status. Duplicate or
+unmapped final record IDs fail instead of being assigned to an incorrect sample.
+Provenance records the final FASTA's SHA-256 hash. The adapter accepts it through
+`--fasta`, with `sequence_ids` in each sample's `--manifest` entry; older manifests
+with per-sample `fasta` paths remain supported for standalone use.
+
+Deploy the updated CLI container before the pipeline revisions that pass
+`--fasta`. Local source changes do not alter a server's cached or published image.
 
 Successful tasks publish into `<outdir>/primer_check/`:
 

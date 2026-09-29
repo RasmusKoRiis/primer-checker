@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run one assay type for an explicitly routed Nextflow consensus manifest.
 
-The manifest is a list of {sample_id, fasta: [paths], subtype, subtype_file}.
-No sample/virus identity is inferred from filenames. PCR input is a JSON file
-or a directory of JSON databases, with external assets kept beside each JSON.
+With --fasta, the manifest maps {sample_id, sequence_ids, subtype, subtype_file}
+to records in the pipeline's final multi-FASTA. Legacy manifests containing
+per-sample fasta paths remain supported. No identity is inferred from filenames.
 """
 
 import argparse
@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -36,7 +37,10 @@ def load_pcr_databases(path):
     seen = set()
     provenance = []
     for database in files:
-        records, validation = analysis.load_primer_records(str(database))
+        # Unified databases also describe NGS panels. The independent NGS task
+        # loads its selected sequencing scheme from --ngs-dir, so a PCR check
+        # must not require the JSON's unrelated BED/FASTA assets to be deployed.
+        records, validation = analysis.load_primer_records(str(database), include_ngs_panels=False)
         analysis.print_validation_messages(validation)
         provenance.append({'file': str(database), 'sha256': file_digest(database)})
         for organism, primers in records.items():
@@ -135,10 +139,50 @@ def select_target(virus, subtype, records):
     return None
 
 
+def route_final_fasta(samples, fasta, directory):
+    """Select each sample's records from the final export, never its old FASTAs."""
+    ids = analysis.get_subject_ids(str(fasta))
+    if len(ids) != len(set(ids)):
+        raise ValueError('Duplicate sequence IDs in final consensus FASTA')
+    sequences = analysis.read_fasta_sequences(str(fasta))
+    owners = {}
+    routed = []
+    for index, sample in enumerate(samples):
+        sequence_ids = sample.get('sequence_ids')
+        if not isinstance(sequence_ids, list):
+            raise ValueError(f"Missing sequence_ids for sample {sample['sample_id']} in final FASTA manifest")
+        selected = []
+        for sequence_id in dict.fromkeys(sequence_ids):
+            if sequence_id not in sequences:
+                continue  # The final export may exclude a sample or segment.
+            if sequence_id in owners:
+                raise ValueError(f'Final FASTA record assigned to multiple samples: {sequence_id}')
+            owners[sequence_id] = sample['sample_id']
+            selected.append(sequence_id)
+        files = []
+        if selected:
+            target = Path(directory) / f'sample_{index}.fasta'
+            target.write_text(''.join(f'>{name}\n{sequences[name]}\n' for name in selected))
+            files = [str(target)]
+        routed.append({**sample, 'fasta': files})
+    unmatched = set(sequences) - owners.keys()
+    if unmatched:
+        raise ValueError('Final FASTA records missing sample metadata: ' + ', '.join(sorted(unmatched)))
+    return routed
+
+
 def run(args):
     samples = json.loads(Path(args.manifest).read_text())
     if not isinstance(samples, list):
         raise ValueError('The consensus manifest must be a list')
+    if args.fasta:
+        with tempfile.TemporaryDirectory(prefix='primer-final-fasta-') as directory:
+            analyse_samples(args, route_final_fasta(samples, args.fasta, directory))
+    else:
+        analyse_samples(args, samples)
+
+
+def analyse_samples(args, samples):
     records, assets = ({}, [])
     if args.assay_type == 'pcr':
         if not args.pcr_db:
@@ -194,6 +238,8 @@ def run(args):
             )
             sequences = analysis.read_fasta_sequences(str(fasta))
             for row in file_rows:
+                if args.fasta:
+                    row['Fasta_File'] = str(args.fasta)
                 subject = sequences[row['Subject_Sequence_ID']]
                 aligned_ambiguity = row['Hit_Status'] == 'hit' and any(
                     base not in 'ACGT-' for base in row['Subject_Alignment'].upper())
@@ -231,12 +277,15 @@ def run(args):
         'assays': list(used_assays.values()),
         'comparisons': len(rows),
     }
+    if args.fasta:
+        provenance['consensus_fasta'] = {'file': str(args.fasta), 'sha256': file_digest(args.fasta)}
     Path(f'{prefix}.provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', required=True)
+    parser.add_argument('--fasta', help='Final combined consensus FASTA; manifest supplies sequence IDs and subtypes')
     parser.add_argument('--virus', required=True, choices=['SARS-CoV-2', 'RSV', 'Influenza'])
     parser.add_argument('--assay-type', required=True, choices=['pcr', 'ngs'])
     parser.add_argument('--pcr-db')

@@ -897,7 +897,12 @@ def flatten_virus_organized_library(primer_library: dict) -> dict:
     return flat
 
 
-def validate_virus_organized_primer_library(primer_library: object, library_file: str | None = None) -> ValidationResult:
+def validate_virus_organized_primer_library(
+    primer_library: object,
+    library_file: str | None = None,
+    *,
+    include_ngs_panels: bool = True,
+) -> ValidationResult:
     result = ValidationResult()
     if not isinstance(primer_library, dict):
         result.errors.append("Virus-organized primer library must be a JSON object.")
@@ -945,7 +950,8 @@ def validate_virus_organized_primer_library(primer_library: object, library_file
             if scheme.get("organism") and scheme.get("organism") != organism:
                 result.errors.append(f"{context} PCR scheme '{scheme_id}' organism does not match '{organism}'.")
 
-        for panel in _section_list(virus.get("ngs"), "panels"):
+        panels = _section_list(virus.get("ngs"), "panels") if include_ngs_panels else []
+        for panel in panels:
             if not isinstance(panel, dict):
                 continue
             panel_id = panel.get("panel_id", "")
@@ -963,9 +969,9 @@ def validate_virus_organized_primer_library(primer_library: object, library_file
     flat_validations = []
     if flat.get("schemes"):
         flat_validations.append(validate_normalized_primer_library(flat))
-    if flat.get("panels"):
+    if include_ngs_panels and flat.get("panels"):
         flat_validations.append(validate_panel_primer_library(flat, library_file=library_file))
-    if not flat_validations:
+    if include_ngs_panels and not flat_validations:
         result.errors.append("Virus-organized primer library does not contain any PCR schemes or NGS panels.")
         return result
     return merge_validation_results(result, *flat_validations)
@@ -1423,11 +1429,18 @@ def legacy_library_to_normalized_database(
     return normalized
 
 
-def load_primer_records(library_file: str) -> tuple[dict[str, list[PrimerRecord]], ValidationResult]:
+def load_primer_records(
+    library_file: str,
+    *,
+    include_ngs_panels: bool = True,
+) -> tuple[dict[str, list[PrimerRecord]], ValidationResult]:
+    """Load primers, optionally excluding NGS panels and their asset validation."""
     primer_library = load_primer_library(library_file)
     was_virus_organized = is_virus_organized_primer_library(primer_library)
     if was_virus_organized:
-        validation = validate_virus_organized_primer_library(primer_library, library_file=library_file)
+        validation = validate_virus_organized_primer_library(
+            primer_library, library_file=library_file, include_ngs_panels=include_ngs_panels,
+        )
         if validation.errors:
             error_text = "\n".join(f"- {error}" for error in validation.errors)
             sys.exit(f"Primer library validation failed for {library_file}:\n{error_text}")
@@ -1444,7 +1457,7 @@ def load_primer_records(library_file: str) -> tuple[dict[str, list[PrimerRecord]
         if not was_virus_organized:
             if has_schemes:
                 validation = merge_validation_results(validation, validate_normalized_primer_library(primer_library))
-            if has_panels:
+            if has_panels and include_ngs_panels:
                 validation = merge_validation_results(validation, validate_panel_primer_library(primer_library, library_file=library_file))
         if validation.errors:
             error_text = "\n".join(f"- {error}" for error in validation.errors)
@@ -1452,7 +1465,7 @@ def load_primer_records(library_file: str) -> tuple[dict[str, list[PrimerRecord]
 
         if has_schemes:
             record_maps.append(normalized_library_to_records(primer_library))
-        if has_panels:
+        if has_panels and include_ngs_panels:
             record_maps.append(panel_library_to_records(primer_library, library_file, validation=validation))
         if validation.errors:
             error_text = "\n".join(f"- {error}" for error in validation.errors)

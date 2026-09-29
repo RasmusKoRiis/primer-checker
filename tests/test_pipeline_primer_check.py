@@ -24,7 +24,7 @@ def write_fasta(path, header, sequence=OLIGO):
     return str(path)
 
 
-def write_database(path):
+def write_database(path, unified=False):
     path.mkdir(parents=True, exist_ok=True)
     data = {
         'SARS-CoV-2': {'SARS_F': OLIGO},
@@ -33,11 +33,44 @@ def write_database(path):
         'Influenza-A': {'H1_F_HA': OLIGO, 'H3_F_HA': OLIGO, 'H3_F_M': OLIGO},
         'Influenza-B': {'B_F_HA': OLIGO},
     }
+    if unified:
+        normalized = analysis.legacy_library_to_normalized_database(data, 'TEST')
+        data = {'schema_version': '3.0', 'database_version': 'TEST', 'viruses': [
+            {'organism': scheme['organism'], 'pcr': {'schemes': [scheme]}}
+            for scheme in normalized['schemes']
+        ]}
+        data['viruses'][0]['ngs'] = {'panels': [{
+            'panel_id': 'missing-ngs', 'display_name': 'Undeployed NGS panel',
+            'panel_version': 'TEST', 'files': {'bed': 'assets/missing.bed'},
+        }]}
     (path / 'primers.json').write_text(json.dumps(data))
     return path
 
 
-def invoke(tmp_path, virus, samples, assay='pcr', database=None, ngs=None, extra_env=None):
+def write_mixed_database(path, layout):
+    scheme = {
+        'scheme_id': 'synthetic-pcr', 'display_name': 'Synthetic PCR',
+        'organism': 'SARS-CoV-2', 'version': 'TEST',
+        'primers': [{'id': 'F', 'name': 'F', 'sequence': OLIGO,
+                     'role': 'forward_primer', 'segment': ''}],
+    }
+    panel = {
+        'panel_id': 'synthetic-ngs', 'display_name': 'Synthetic NGS',
+        'organism': 'SARS-CoV-2', 'panel_version': 'TEST',
+        'files': {'bed': 'assets/missing.bed', 'primers_fasta': 'assets/missing.fasta'},
+    }
+    data = {'schema_version': '3.0', 'database_version': 'TEST'}
+    if layout == 'virus':
+        data['viruses'] = [{'organism': 'SARS-CoV-2',
+                            'pcr': {'schemes': [scheme]}, 'ngs': {'panels': [panel]}}]
+    else:
+        data.update(schemes=[scheme], panels=[panel])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data))
+    return path
+
+
+def invoke(tmp_path, virus, samples, assay='pcr', database=None, ngs=None, extra_env=None, final_fasta=None):
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps(samples))
     command = [sys.executable, str(ROOT / 'scripts/run_pipeline_primer_check.py'),
@@ -47,6 +80,8 @@ def invoke(tmp_path, virus, samples, assay='pcr', database=None, ngs=None, extra
         command += ['--pcr-db', str(database)]
     if ngs:
         command += ['--ngs-dir', str(ngs), '--ngs-scheme', 'TEST']
+    if final_fasta:
+        command += ['--fasta', str(final_fasta)]
     env = None
     if extra_env:
         import os
@@ -59,6 +94,7 @@ def csv_rows(path):
         return list(csv.DictReader(handle))
 
 
+@pytest.mark.parametrize('unified', [False, True])
 @pytest.mark.parametrize('virus,subtype,header,expected', [
     ('SARS-CoV-2', '', 'sample', 'SARS_F'),
     ('RSV', 'RSVA', 'sample', 'RSVA_F'),
@@ -68,8 +104,8 @@ def csv_rows(path):
     ('Influenza', 'H3N2', 'sample|03-MP-H3N2', 'H3_F_M'),
     ('Influenza', 'VICVIC', 'sample|01-HA-VICVIC', 'B_F_HA'),
 ])
-def test_pcr_routes_real_blast(tmp_path, virus, subtype, header, expected):
-    db = write_database(tmp_path / 'pcr with spaces')
+def test_pcr_routes_real_blast(tmp_path, virus, subtype, header, expected, unified):
+    db = write_database(tmp_path / 'pcr with spaces', unified=unified)
     fasta = write_fasta(tmp_path / 'sample.fa', header)
     result = invoke(tmp_path, virus, [{'sample_id': 'sample', 'subtype': subtype, 'fasta': [fasta]}], database=db)
     assert result.returncode == 0, result.stderr
@@ -209,3 +245,88 @@ def test_staged_json_preserves_relative_assets(tmp_path):
     staged.symlink_to(source)
     records, _ = pipeline.load_pcr_databases(staged)
     assert records['Demo-virus'][0].sequence == OLIGO
+
+
+@pytest.mark.parametrize('layout', ['virus', 'flat'])
+def test_pcr_does_not_require_unrelated_ngs_panel_assets(tmp_path, layout):
+    database = write_mixed_database(tmp_path / 'pcr' / 'unified.json', layout)
+    # Full-library users still receive errors for missing NGS assets.
+    with pytest.raises(SystemExit, match='does not exist'):
+        analysis.load_primer_records(str(database))
+
+    fasta = write_fasta(tmp_path / 'sample.fa', 'sample')
+    result = invoke(tmp_path, 'SARS-CoV-2', [{'sample_id': 'sample', 'fasta': [fasta]}],
+                    database=database.parent)
+    assert result.returncode == 0, result.stderr
+    rows = csv_rows(tmp_path / 'result.csv')
+    assert len(rows) == 1
+    assert rows[0]['Primer_Name'] == 'F'
+    assert rows[0]['Assay_Type'] == 'pcr'
+    assert rows[0]['Mismatches'] == '0'
+    provenance = json.loads((tmp_path / 'result.provenance.json').read_text())
+    assert provenance['primer_assets'][0]['sha256'] == pipeline.file_digest(database)
+
+
+@pytest.mark.parametrize('layout', ['virus', 'flat'])
+def test_pcr_validation_remains_strict_without_ngs_assets(tmp_path, layout):
+    database = write_mixed_database(tmp_path / 'unified.json', layout)
+    data = json.loads(database.read_text())
+    schemes = data['viruses'][0]['pcr']['schemes'] if layout == 'virus' else data['schemes']
+    schemes[0]['primers'][0]['sequence'] = 'INVALID!'
+    database.write_text(json.dumps(data))
+    with pytest.raises(SystemExit, match='unsupported IUPAC'):
+        pipeline.load_pcr_databases(database)
+
+
+@pytest.mark.parametrize('layout', ['virus', 'flat'])
+def test_ngs_only_database_does_not_block_other_pcr_databases(tmp_path, layout):
+    database = write_mixed_database(tmp_path / 'pcr' / 'panels.json', layout)
+    data = json.loads(database.read_text())
+    if layout == 'virus':
+        del data['viruses'][0]['pcr']
+    else:
+        del data['schemes']
+    database.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='No PCR primers'):
+        pipeline.load_pcr_databases(database)
+    write_database(database.parent)
+    records, _ = pipeline.load_pcr_databases(database.parent)
+    assert records['SARS-CoV-2'][0].name == 'SARS_F'
+
+
+@pytest.mark.parametrize('virus,subtype,header', [
+    ('SARS-CoV-2', '', 'kept'), ('RSV', 'RSVB', 'kept'),
+    ('Influenza', 'H1N1', 'kept|01-HA-H1N1'),
+])
+def test_final_fasta_is_the_only_source_of_sequences(tmp_path, virus, subtype, header):
+    final_fasta = write_fasta(tmp_path / 'final.fasta', header, OLIGO[:18] + 'A' + OLIGO[19:])
+    samples = [
+        {'sample_id': 'kept', 'subtype': subtype, 'sequence_ids': [header], 'fasta': ['missing-intermediate.fa']},
+        {'sample_id': 'filtered', 'subtype': subtype, 'sequence_ids': ['filtered'], 'fasta': ['missing-intermediate.fa']},
+    ]
+    result = invoke(tmp_path, virus, samples, database=write_database(tmp_path / 'pcr', unified=True),
+                    final_fasta=final_fasta)
+    assert result.returncode == 0, result.stderr
+    rows = csv_rows(tmp_path / 'result.csv')
+    assert len(rows) == 1
+    assert rows[0]['Sample_ID'] == 'kept'
+    assert rows[0]['Subject_Sequence_ID'] == header
+    assert rows[0]['Mismatches'] == '1'
+    assert rows[0]['Fasta_File'] == final_fasta
+    assert {row['Sample_ID']: row['Status'] for row in csv_rows(tmp_path / 'result.status.csv')} == {
+        'kept': 'analysed', 'filtered': 'no_consensus'}
+    provenance = json.loads((tmp_path / 'result.provenance.json').read_text())
+    assert provenance['consensus_fasta']['sha256'] == pipeline.file_digest(final_fasta)
+
+
+@pytest.mark.parametrize('headers,samples,error', [
+    (['record', 'record'], [{'sample_id': 'one', 'sequence_ids': ['record']}], 'Duplicate sequence IDs'),
+    (['record'], [{'sample_id': 'one', 'sequence_ids': ['record']},
+                  {'sample_id': 'two', 'sequence_ids': ['record']}], 'assigned to multiple samples'),
+    (['record'], [{'sample_id': 'one', 'sequence_ids': ['other']}], 'missing sample metadata'),
+])
+def test_final_fasta_rejects_ambiguous_or_unassigned_records(tmp_path, headers, samples, error):
+    fasta = tmp_path / 'final.fasta'
+    fasta.write_text(''.join(f'>{header}\n{OLIGO}\n' for header in headers))
+    with pytest.raises(ValueError, match=error):
+        pipeline.route_final_fasta(samples, fasta, tmp_path)
